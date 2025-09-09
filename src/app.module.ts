@@ -60,6 +60,8 @@ import { ResumenesAdminModule } from './resumenes-admin/resumenes-admin.module';
 import { CronSnapshootModule } from './cron-snapshoot/cron-snapshoot.module';
 import { SaldosServiceService } from './crion-snapshoot/saldos-service/saldos-service.service';
 import { CajaAdministrativoModule } from './caja-administrativo/caja-administrativo.module';
+import { SkuModule } from './sku/sku.module';
+import { FormatoPresentacionModule } from './formato-presentacion/formato-presentacion.module';
 
 @Module({
   imports: [
@@ -122,6 +124,8 @@ import { CajaAdministrativoModule } from './caja-administrativo/caja-administrat
     ResumenesAdminModule,
     CronSnapshootModule,
     CajaAdministrativoModule,
+    SkuModule,
+    FormatoPresentacionModule,
   ],
   controllers: [AppController],
   providers: [AppService, CloudinaryProvider, SaldosServiceService],

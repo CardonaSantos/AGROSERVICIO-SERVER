@@ -61,7 +61,7 @@ export class UtilitiesService {
             fechaVencimiento: prod?.fechaExpiracion,
             precioCosto: prod.precioCosto,
             sucursal: { connect: { id: prod.sucursalId } },
-            producto: { connect: { id: prod.productoId } },
+            sku: { connect: { id: prod.productoId } },
             entregaStock: entregaStock
               ? { connect: { id: entregaStock.id } }
               : undefined,

@@ -9,6 +9,8 @@ async function bootstrap() {
     origin: [
       'https://agroservicio.up.railway.app',
       'http://127.0.0.1:5173',
+      'http://127.0.0.1:5173',
+
       // agrega aquí cualquier otro origin de tu front (p.ej. http://localhost:3001)
     ],
     credentials: true, // <- para cookies/withCredentials

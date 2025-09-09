@@ -4,6 +4,7 @@ import { UpdateTransferenciaProductoDto } from './dto/update-transferencia-produ
 import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationService } from 'src/notification/notification.service';
 import { HistorialStockTrackerService } from 'src/historial-stock-tracker/historial-stock-tracker.service';
+import { toDecimal } from 'src/utils/decimal';
 
 @Injectable()
 export class TransferenciaProductoService {
@@ -16,17 +17,18 @@ export class TransferenciaProductoService {
 
   async transferirProducto(dto: CreateTransferenciaProductoDto) {
     const {
-      productoId,
+      productoId, // cambiar a productoSKUID
       cantidad,
       sucursalOrigenId,
       sucursalDestinoId,
       usuarioEncargadoId,
+      productoSKUID,
     } = dto;
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Buscar los stocks origen en FIFO
       const stockOrigenes = await tx.stock.findMany({
-        where: { productoId, sucursalId: sucursalOrigenId },
+        where: { productoSkuId: productoSKUID, sucursalId: sucursalOrigenId },
         orderBy: { fechaIngreso: 'asc' },
       });
 
@@ -61,7 +63,7 @@ export class TransferenciaProductoService {
       }
 
       const stockDestino = await tx.stock.findFirst({
-        where: { productoId, sucursalId: sucursalDestinoId },
+        where: { productoSkuId: productoSKUID, sucursalId: sucursalDestinoId },
       });
       if (stockDestino) {
         await tx.stock.update({
@@ -69,13 +71,18 @@ export class TransferenciaProductoService {
           data: { cantidad: stockDestino.cantidad + cantidad },
         });
       } else {
+        const first = stockOrigenes[0];
+
+        const precioCosto = toDecimal(first?.precioCosto); // Decimal exacto
+        const costoTotal = precioCosto.mul(cantidad); // cantidad:number OK
+
         await tx.stock.create({
           data: {
-            productoId,
+            productoSkuId: productoSKUID,
             sucursalId: sucursalDestinoId,
             cantidad,
-            precioCosto: stockOrigenes[0]?.precioCosto ?? 0,
-            costoTotal: (stockOrigenes[0]?.precioCosto ?? 0) * cantidad,
+            precioCosto: precioCosto,
+            costoTotal: costoTotal,
             fechaIngreso: new Date(),
           },
         });

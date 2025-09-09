@@ -1,10 +1,32 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// ============================================================================
+// PRISMA SCHEMA — ORDENADO POR MÓDULOS / FUNCIONALIDADES
+// ============================================================================
+//
+// ÍNDICE RÁPIDO
+// [S0] Configuración Prisma (generator / datasource)
+// [S1] Catálogos/Enums globales básicos
+// [S2] Sucursales y Usuarios (core)
+// [S3] Productos y Catálogos de Producto (precios, historial, imágenes, thresholds)
+// [S4] Inventario / Stock (lotes, ajustes, eliminaciones, vencimientos, historial)
+// [S5] Proveedores
+// [S6] Clientes y Ventas (venta, pago, detalles, anuladas, garantías, cuotas)
+// [S7] Taller / Reparaciones
+// [S8] Caja y Finanzas (turnos, movimientos, cuentas, clasificaciones)
+// [S9] Saldos y Resúmenes
+// [S10] Requisiciones / Compras / Pedidos
+// [S11] Transferencias entre Sucursales
+// [S12] Metas y Depósitos de Cobro
+// [S13] Notificaciones
+// [S14] Ubicación (Departamentos / Municipios)
+// [S15] Otros (Sorteos)
+//
+// Nota: No se han cambiado nombres ni propiedades; únicamente se reordenó y
+// se añadieron comentarios de organización.
+// ============================================================================
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-
+// ============================================================================
+// [S0] CONFIGURACIÓN PRISMA
+// ============================================================================
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,1484 +36,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-model Sucursal {
-  id              Int         @id @default(autoincrement())
-  nombre          String      // Nombre de la sucursal
-  direccion       String?     // Dirección física de la sucursal
-  telefono        String?     // Teléfono de contacto
-  pbx             String?
-  productos       Stock[]     // Relación con el stock de productos de la sucursal
-  usuarios        Usuario[]   // Relación con los empleados de la sucursal
-  creadoEn        DateTime    @default(now())
-  actualizadoEn   DateTime    @updatedAt
-  tipoSucursal    TipoSucursal
-  estadoOperacion   Boolean   @default(true) // Activa o inactiva
-  Venta Venta[]
-  TransferenciaProducto TransferenciaProducto[] @relation("SucursalOrigen")
-  TransferenciaProductoDestino TransferenciaProducto[] @relation("SucursalDestino") // NUEVA RELACIÓN
-  EntregaStock EntregaStock[]
-  solicitudesOrigen    SolicitudTransferenciaProducto[] @relation("SucursalOrigenSolicitud")
-  solicitudesDestino   SolicitudTransferenciaProducto[] @relation("SucursalDestinoSolicitud")
-  EliminacionStock EliminacionStock[]
-  RegistroCaja RegistroCaja[]
-
-  saldosDiarios    SucursalSaldoDiario[] 
-  VentaEliminada VentaEliminada[]
-  VentaCuota VentaCuota[]
-  PlantillaComprobante PlantillaComprobante[]
-  Reparacion Reparacion[]
-  MetaUsuario MetaUsuario[]
-  MetaCobros MetaCobros[]
-  DepositoCobro DepositoCobro[]
-  requisiciones Requisicion[]
-  resumenesVenta ResumenVenta[]
-  HistorialStock HistorialStock[]
-  HistorialPrecioCosto HistorialPrecioCosto[]
-  garantias Garantia[]
-  compras Compra[]
-  pedidos Pedido[]
-  movimientosFinancieros MovimientoFinanciero[]
-}
-
-model Reparacion {
-  id                 Int                @id @default(autoincrement())
-  usuarioId          Int                // ID del usuario que atendió
-  usuario            Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  sucursalId         Int                // ID de la sucursal donde se realiza la reparación
-  sucursal           Sucursal           @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-
-  clienteId          Int                // Cliente asociado a la reparación
-  cliente            Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-
-  productoId         Int?               // Producto del sistema (opcional)
-  producto           Producto?          @relation(fields: [productoId], references: [id], onDelete: SetNull)
-
-  productoExterno    String?            // Nombre o descripción del producto externo
-
-  problemas          String             // Descripción de los problemas reportados
-  observaciones      String?            // Observaciones adicionales (ej. accesorios entregados)
-  
-  fechaRecibido      DateTime           @default(now()) // Fecha en que se recibió el producto
-  fechaEntregado     DateTime?          // Fecha de entrega del producto reparado
-  estado             EstadoReparacion   @default(PENDIENTE) // Estado actual de la reparación
-
-  registros          RegistroReparacion[] // Historial de acciones realizadas sobre la reparación
-
-  hojaSolucion       String?            // Detalles finales de la solución
-  creadoEn           DateTime           @default(now()) // Fecha de creación
-  actualizadoEn      DateTime           @updatedAt      // Última actualización
-}
-
-model RegistroReparacion {
-  id                 Int                @id @default(autoincrement())
-  reparacionId       Int                // Relación con la reparación
-  reparacion         Reparacion         @relation(fields: [reparacionId], references: [id], onDelete: Cascade)
-
-  usuarioId          Int                // Usuario que realizó la acción
-  usuario            Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  estado             EstadoReparacion   // Estado de la reparación al momento del registro
-  accionesRealizadas String             // Descripción de las acciones realizadas (opcional)
-  fechaRegistro      DateTime           @default(now()) // Fecha del registro
-  comentarioFinal    String?            // Comentario final sobre la reparación
-
-  montoPagado Int?
-}
-
-enum EstadoReparacion {
-  RECIBIDO
-  PENDIENTE       // El producto está registrado pero la reparación no ha comenzado
-  EN_PROCESO      // Reparación activa
-  ESPERANDO_PIEZAS // Reparación pausada por falta de piezas
-  REPARADO        // Reparación finalizada, listo para entrega
-  ENTREGADO       // Reparación completada y producto entregado al cliente
-  CANCELADO       // Reparación cancelada
-  NO_REPARABLE    // Producto no reparable tras diagnóstico
-  FINALIZADO
-}
-
-//============================>SALDOS Y OTROS
-
-model VentaCuota {
-  id                  Int          @id @default(autoincrement())
-  clienteId           Int          // Cliente relacionado
-  cliente             Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  usuarioId           Int          // Usuario que autorizó la venta
-  usuario             Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  sucursalId          Int          // Sucursal donde se realizó la venta
-  sucursal            Sucursal     @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  totalVenta          Float        // Monto total de la venta
-  cuotaInicial        Float        // Monto inicial pagado
-  cuotasTotales       Int          // Número total de cuotas
-  fechaInicio         DateTime     @default(now()) // Fecha en que se inició la venta a crédito
-  estado              EstadoCuota  @default(ACTIVA) // Enum para manejar el estado de la venta
-  cuotas              Cuota[]      // Relación con las cuotas individuales
-  // productos           VentaProducto[] // Relación con los productos vendidos
-  creadoEn            DateTime     @default(now())
-  actualizadoEn       DateTime     @updatedAt
-  dpi String
-  testigos Json
-  fechaContrato       DateTime     @default(now()) //
-  montoVenta          Float
-  garantiaMeses       Int
-  totalPagado         Float        @default(0)      // Total pagado hasta el momento (se actualizará con cada pago)
-  diasEntrePagos      Int          @default(0)  
-  interes             Int          @default(0)  // Porcentaje de interés aplicado al crédito (por ejemplo, 15 para 15%)
-  comentario String?
-  //
-  // Relación directa con la venta original
-  ventaId             Int?         @unique
-  venta               Venta?       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
-  montoTotalConInteres Int?
-  //PAGOS QUE TIENE QUE HACER
-}
-
-
-model Cuota {
-  id                  Int          @id @default(autoincrement())
-  ventaCuotaId        Int          // Relación con la venta a cuotas
-  ventaCuota          VentaCuota   @relation(fields: [ventaCuotaId], references: [id], onDelete: Cascade)
-  monto               Float        // Monto de la cuota
-  fechaVencimiento    DateTime?     // Fecha en que debe realizarse el pago
-  fechaPago           DateTime?    //ya no es default, sino que la actualizaremos cuando hagamos el pago
-  estado              EstadoPago   @default(PENDIENTE) // Estado de la cuota
-  usuarioId           Int?         // Usuario que recibió el pago (null si no se ha pagado)
-  usuario             Usuario?     @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
-  creadoEn            DateTime     @default(now())
-  actualizadoEn       DateTime     @updatedAt
-  comentario String?
-  //1. MONTO QUE TIENE QUE PAGAR
-  montoEsperado Float?
-  // 2. Saldo pendiente (calculable)
-}
-
-
-
-model PlantillaComprobante {
-  id          Int        @id @default(autoincrement())
-  nombre      String     // Nombre o tipo de plantilla (Ej. "Plantilla Cuota Teléfonos")
-  texto       String     // Texto enriquecido de la plantilla (puede ser un string largo o HTML)
-  sucursalId  Int?
-  sucursal    Sucursal?  @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
-  creadoEn    DateTime   @default(now())
-  actualizadoEn DateTime @updatedAt
-}
-
-
-enum EstadoPago {
-  PENDIENTE
-  PAGADA
-  ATRASADA
-}
-
-enum EstadoCuota {
-  ACTIVA
-  COMPLETADA
-  CANCELADA
-}
-
-//=============================================>
-
-model VentaEliminada {
-  id                 Int        @id @default(autoincrement())
-  usuarioId          Int        // ID del usuario que realizó la eliminación
-  usuario            Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  motivo             String     // Motivo de la eliminación
-  totalVenta         Float      // Total de la venta
-  clienteId          Int?        // ID del usuario que realizó la eliminación
-  cliente            Cliente?    @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  fechaEliminacion   DateTime   @default(now()) // Fecha y hora de la eliminación
-  sucursalId         Int        // ID de la sucursal a la que pertenece la venta eliminada
-  sucursal           Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-
-  VentaEliminadaProducto VentaEliminadaProducto[] // Relación con los productos de la venta eliminada
-  movimientoStock HistorialStock[]
-}
-
-model VentaEliminadaProducto {
-  id                 Int         @id @default(autoincrement())
-  ventaEliminadaId   Int         // Relación con VentaEliminada
-  ventaEliminada     VentaEliminada @relation(fields: [ventaEliminadaId], references: [id], onDelete: Cascade)
-  productoId         Int?         // Relación con Producto
-  producto           Producto?    @relation(fields: [productoId], references: [id], onDelete: SetNull) // Permite que el producto sea eliminado sin romper la relación
-  cantidad           Int         // Cantidad del producto en la venta
-  precioVenta        Float       // Precio al que se vendió el producto
-  creadoEn           DateTime    @default(now()) // Fecha de creación del registro
-}
-
-// =======================> ESTADO DE CAJA Y MOVIMIENTOS A MEJORAR : TOP
-
-  model SucursalSaldoDiario {
-    id              Int       @id @default(autoincrement())
-    sucursalId      Int
-    sucursal        Sucursal  @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-
-    // Normalizar a 00:00:00 del día
-    fecha           DateTime
-
-    // Caja (efectivo)
-    saldoInicioCaja Decimal   @db.Decimal(14,2)
-    ingresosCaja    Decimal   @db.Decimal(14,2)
-    egresosCaja     Decimal   @db.Decimal(14,2)
-    saldoFinalCaja  Decimal   @db.Decimal(14,2)
-
-    // Banco
-    saldoInicioBanco Decimal  @db.Decimal(14,2)
-    ingresosBanco     Decimal  @db.Decimal(14,2)
-    egresosBanco      Decimal  @db.Decimal(14,2)
-    saldoFinalBanco   Decimal  @db.Decimal(14,2)
-
-    globalDiarioId   Int?
-    globalDiario     SaldoGlobalDiario? @relation("GlobalSaldos", fields: [globalDiarioId], references: [id], onDelete: SetNull)
-
-    creadoEn         DateTime @default(now())
-    actualizadoEn    DateTime @updatedAt
-
-    @@unique([sucursalId, fecha])
-}
-
-  model SaldoGlobalDiario {
-    id               Int      @id @default(autoincrement())
-    fecha            DateTime @unique
-
-    // Sumatorias de todas las sucursales
-    saldoTotalCaja   Decimal  @db.Decimal(14,2)
-    ingresosTotalCaja Decimal @db.Decimal(14,2)
-    egresosTotalCaja  Decimal @db.Decimal(14,2)
-
-    saldoTotalBanco    Decimal @db.Decimal(14,2)
-    ingresosTotalBanco Decimal @db.Decimal(14,2)
-    egresosTotalBanco  Decimal @db.Decimal(14,2)
-
-    saldosDiarios    SucursalSaldoDiario[] @relation("GlobalSaldos")
-
-    usuarioId        Int?
-    usuario          Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
-
-    creadoEn         DateTime @default(now())
-    actualizadoEn    DateTime @updatedAt
-  }                               
-
-  model RegistroCaja {
-  id               Int       @id @default(autoincrement())
-  sucursalId       Int
-  sucursal         Sucursal  @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-
-  usuarioInicioId  Int
-  usuarioInicio    Usuario   @relation("UsuarioInicio", fields: [usuarioInicioId], references: [id])
-  usuarioCierreId  Int?
-  usuarioCierre    Usuario?  @relation("UsuarioCierre", fields: [usuarioCierreId], references: [id])
-
-  fechaApertura    DateTime  @default(now())
-  fechaCierre      DateTime?
-
-  // CHANGED: decimales para dinero
-  saldoInicial     Decimal   @db.Decimal(14,2)
-  saldoFinal       Decimal?  @db.Decimal(14,2)
-
-  estado           EstadoTurnoCaja @default(ABIERTO)
-  comentario       String?
-  comentarioFinal  String?
-
-  // CHANGED: relación con movimientos (ahora “financieros”)
-  movimientos      MovimientoFinanciero[]
-
-  // Opcional: “ventas” si ya las relacionas al turno
-  venta            Venta[]
-
-  // Opcional: fondo fijo proyectado (para sugerir depósito de cierre)
-  fondoFijo        Decimal   @db.Decimal(14,2) @default(0)
-
-  // (Puede ser redundante si confías en los movimientos de cierre)
-  depositado       Boolean   @default(false)
-
-  creadoEn         DateTime @default(now())
-  actualizadoEn    DateTime @updatedAt
-
-  @@index([sucursalId, estado])
-}
-
-  enum ComprobanteTipo {
-    DEPOSITO_BOLETA
-    TRANSFERENCIA
-    CHEQUE 
-    TARJETA_VOUCHER
-    OTRO
-  }
-
-  model MovimientoFinanciero {
-    id               Int       @id @default(autoincrement())
-
-    fecha            DateTime  @default(now())
-    sucursalId       Int
-    sucursal         Sucursal  @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-
-    // Si impacta efectivo, DEBE pertenecer a un turno ABIERTO
-    registroCajaId   Int?
-    registroCaja     RegistroCaja? @relation(fields: [registroCajaId], references: [id])
-
-    // Clasificación y motivo (vistas Admin)
-    clasificacion    ClasificacionAdmin
-    motivo           MotivoMovimiento
-
-    // Reporte/conciliación
-    metodoPago       MetodoPago?
-
-    // IMPORTANTE: efectos explícitos (positivo o negativo)
-    deltaCaja        Decimal   @db.Decimal(14,2) @default(0)    // + entra efectivo; - sale efectivo
-    deltaBanco       Decimal   @db.Decimal(14,2) @default(0)    // + entra al banco; - sale del banco
-
-    // Opcional si deltaBanco ≠ 0
-    cuentaBancariaId Int?
-    cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
-
-    // Información de negocio
-    descripcion      String?
-    referencia       String?
-    conFactura       Boolean?  // útil para compras/gastos
-
-    // Específicos de depósitos (evita ambigüedad solicitada por el cliente)
-    esDepositoCierre   Boolean  @default(false)  // si true => bucket “Depósitos (Cierre)”
-    esDepositoProveedor Boolean @default(false)  // si true => bucket “Depósitos a Proveedor”
-
-    // Proveedor y costos
-    proveedorId        Int?
-    proveedor          Proveedor? @relation(fields: [proveedorId], references: [id])
-
-    gastoOperativoTipo GastoOperativoTipo?   // si motivo = GASTO_OPERATIVO
-    costoVentaTipo     CostoVentaTipo?       // si motivo = COMPRA_MERCADERIA o COSTO_ASOCIADO
-
-    // Inventario (conectar cuando recibamos compras)
-    afectaInventario   Boolean   @default(false)
-
-    // Quién registró
-    usuarioId        Int
-    usuario          Usuario    @relation(fields: [usuarioId], references: [id])
-
-    creadoEn         DateTime   @default(now())
-    actualizadoEn    DateTime   @updatedAt
-    esAsientoVentas  Boolean   @default(false) // 👈 nuevo
-    //nuevo
-    comprobanteTipo    ComprobanteTipo?
-    comprobanteNumero  String?         @db.VarChar(64)
-    comprobanteFecha   DateTime?
-    comprobanteUrl     String?         // foto/pdf del baucher
-    //nuevo
-
-    @@unique([registroCajaId, referencia], map: "uq_movfin_turno_referencia") // 👈 idempotencia por turno
-    @@index([registroCajaId, esAsientoVentas])                                  // 👈 útil para consultas
-
-    @@index([sucursalId, fecha])
-    @@index([registroCajaId])
-    @@index([clasificacion, motivo])
-    @@index([esDepositoCierre, esDepositoProveedor])
-
-    //CONCILIACION EN REPORTES DE CIERRES CON BOLETAS
-    @@unique([cuentaBancariaId, comprobanteTipo, comprobanteNumero], map: "uq_movfin_comprobante")
-    @@index([comprobanteTipo, comprobanteNumero], map: "idx_movfin_comprobante_lookup")
-
-  }
-
-  enum TipoCuentaBancaria { 
-    AHORRO 
-    CORRIENTE 
-    TARJETA 
-    }
-
-  model CuentaBancaria {
-    id          Int      @id @default(autoincrement())
-    banco       String
-    numero      String
-    alias       String?
-    activa      Boolean  @default(true)
-
-    movimientos MovimientoFinanciero[]
-    tipo        TipoCuentaBancaria @default(CORRIENTE)
-    creadoEn    DateTime @default(now())
-    actualizadoEn DateTime @updatedAt
-
-    isDeleted Boolean @default(false)
-    eliminadoEn DateTime? // soft delete
-    @@unique([banco, numero])
-  }
-
-
-// ¿Dónde impacta la contabilidad de resultados?
-  enum ClasificacionAdmin {
-    INGRESO           // Ventas, otros ingresos
-    COSTO_VENTA       // Mercadería + costos asociados (fletes/encomiendas)
-    GASTO_OPERATIVO   // Salarios, energía, logística, etc.
-    TRANSFERENCIA     // Movimientos entre Caja y Banco (no resultado)
-    AJUSTE            // Sobrantes/faltantes/regularizaciones
-    CONTRAVENTA       // Devoluciones / notas de crédito
-  }
-
-// Motivo real del movimiento (habla el idioma del negocio)
-  enum MotivoMovimiento {
-    VENTA
-    OTRO_INGRESO
-    GASTO_OPERATIVO
-    COMPRA_MERCADERIA
-    COSTO_ASOCIADO            // fletes, encomiendas, transporte a tienda
-    DEPOSITO_CIERRE           // “para no dejar efectivo”
-    DEPOSITO_PROVEEDOR        // depósito en ventanilla/boleta pagado con efectivo
-    PAGO_PROVEEDOR_BANCO      // pago a proveedor desde banco (sin pasar por caja)
-    AJUSTE_SOBRANTE
-    AJUSTE_FALTANTE
-    DEVOLUCION
-    BANCO_A_CAJA   //nuevo
-  }
-
-
-// Subtipos útiles (se pueden volver tablas si el cliente quiere editar)
-enum GastoOperativoTipo {
-  SALARIO
-  ENERGIA
-  LOGISTICA
-  RENTA
-  INTERNET
-  PUBLICIDAD
-  VIATICOS
-  OTROS
-}
-
-enum CostoVentaTipo {
-  MERCADERIA
-  FLETE
-  ENCOMIENDA
-  TRANSPORTE
-  OTROS
-}
-
-enum EstadoTurnoCaja {
-  ABIERTO
-  CERRADO
-  ARQUEO
-  AJUSTADO
-  ANULADO
-}
-
-// =======================> MOVIMIENTOS FINANCIEROS Y OTROS 
-
-
-// ==========================> TABLAS PARA MODULO DE PEDIDOS
-model CompraDetalle {
-  id        Int     @id @default(autoincrement())
-  cantidad         Int
-  costoUnitario    Float
-  productoId       Int?
-  producto         Producto?  @relation(fields: [productoId], references: [id])
-  compraId  Int
-  compra Compra @relation(fields: [compraId], references: [id], onDelete: Cascade)
-  // relación opcional a la línea de requisición
-  requisicionLineaId Int?
-  requisicionLinea   RequisicionLinea?    @relation("DetalleRequisicionCompra",fields: [requisicionLineaId],references: [id], onDelete: Cascade)
-  creadoEn        DateTime @default(now())
-  actualizadoEn   DateTime @updatedAt
-}
-
-enum EstadoCompra {
-  RECIBIDO
-  CANCELADO
-  RECIBIDO_PARCIAL
-  ESPERANDO_ENTREGA   // <— lo dejamos en el enum
-}
-
- enum OrigenCompra {
-  DIRECTA
-  REQUISICION
-  PEDIDO
-}
-
-model Compra {
-  id           Int      @id @default(autoincrement())
-  sucursalId   Int?   
-  sucursal     Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  fecha        DateTime @default(now())
-  total        Float
-  detalles     CompraDetalle[]
-  estado EstadoCompra @default(ESPERANDO_ENTREGA)  // TEMPORAL, no usar aún el valor nuevo
-  requisicionId  Int?          @unique
-  requisicion    Requisicion?  @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
-
-  ingresadaAStock        Boolean   @default(false)
-  cantidadRecibidaAcumulada Int @default(0)
-
-  proveedorId  Int?
-  proveedor    Proveedor? @relation(fields:[proveedorId], references:[id], onDelete: SetNull)
-  usuarioId    Int
-  usuario      Usuario   @relation(fields:[usuarioId], references:[id])
-
-  pedido          Pedido?         @relation("PedidoACompra")
-
-  facturaNumero    String?     // p. ej. “F001-000123”
-  facturaFecha     DateTime?   // si quieres guardar la fecha de emisión
-  conFactura       Boolean     @default(false) // si solo te interesa saber si viene con factura
-  origen       OrigenCompra @default(DIRECTA)   // 👈 nuevo campo
-
-  creadoEn        DateTime @default(now())
-  actualizadoEn   DateTime @updatedAt
-}
-
-/// Define los posibles estados de un pedido de cliente
-enum PedidoEstado {
-  PENDIENTE        // recién creado, a la espera de procesar
-  ENVIADO_COMPRAS  // ya se pasó al módulo de compras
-  RECIBIDO         // los artículos llegaron y se ingresaron a stock o se entregaron
-  CANCELADO        // el cliente anuló o no se completó
-}
-
-
-/// Cabecera del pedido de cliente
-enum PedidoPrioridad {
-  ALTA
-  BAJA
-  MEDIA
-}
-
-enum TipoPedido {
-  INTERNO
-  CLIENTE
-}
-
-
-  model Pedido {
-    id             Int           @id @default(autoincrement())
-    folio          String        @unique                     // p.ej. “PED-2025-0001”
-    fecha          DateTime      @default(now())              
-    sucursalId     Int                                             // en qué tienda/clientes se creó
-    sucursal       Sucursal     @relation(fields: [sucursalId], references: [id])
-    clienteId      Int?                                             // quien pide
-    cliente        Cliente?      @relation(fields: [clienteId], references: [id])
-    usuarioId      Int                                             // quién registró el pedido
-    usuario        Usuario      @relation(fields: [usuarioId], references: [id])
-    estado         PedidoEstado @default(PENDIENTE)
-    observaciones  String?                                        // notas adicionales
-    totalLineas    Int          @default(0)                       // número de líneas
-    totalPedido    Float?                                        // suma de (cantidad×precio) de las líneas
-    creadoEn       DateTime     @default(now())
-    actualizadoEn  DateTime     @updatedAt
-    lineas         PedidoLinea[]                                  // detalle de productos
-    /// Opcional: si quieres enlazar este pedido a la Compra que generes
-    compraId       Int?          @unique
-    compra         Compra?       @relation("PedidoACompra",fields: [compraId],references: [id])
-
-    tipo TipoPedido @default(INTERNO)
-    prioridad PedidoPrioridad @default(MEDIA)
-  }
-
-/// Cada línea de un pedido de cliente
-  model PedidoLinea {
-    id             Int       @id @default(autoincrement())
-    pedidoId       Int
-    pedido         Pedido    @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-
-    productoId     Int
-    producto       Producto  @relation(fields: [productoId], references: [id])
-
-    cantidad       Int
-    precioUnitario Float      // precio acordado con el cliente (puede ser null si lo defines luego)
-    subtotal       Float      @default(0)  // puede llenarse en un hook (cantidad×precioUnitario)
-  
-    notas          String?    // por si el cliente pide algo especial en esa línea
-    creadoEn       DateTime   @default(now())
-    actualizadoEn  DateTime   @updatedAt
-  }
-// ==========================> TABLAS PARA MODULO DE PEDIDOS
-
-
-
-model TicketSorteo {
-  id              Int       @id @default(autoincrement()) // ID único para cada sorteo
-  descripcionSorteo String?   // Descripción del sorteo, incluyendo detalles sobre premios
-  // fechaInicio     DateTime?  // Fecha y hora de inicio del sorteo
-  // fechaFinal      DateTime?  // Fecha y hora de finalización del sorteo
-  creadoEn        DateTime  @default(now()) // Fecha de creación del registro
-  actualizadoEn   DateTime  @updatedAt // Fecha de la última actualización
-  estado          EstadoTicket 
-}
-
-enum EstadoTicket {
-  ACTIVO         // El sorteo está en curso
-  INACTIVO     // El sorteo ha finalizado
-}
-
-model Vencimiento {
-  id                     Int          @id @default(autoincrement())
-  fechaVencimiento      DateTime     // Fecha de vencimiento
-  estado                 EstadoVencimiento @default(PENDIENTE) // Estado del vencimiento (pendiente, notificado, etc.)
-  descripcion            String?      // Descripción del vencimiento (opcional)
-  
-  // Relación con Stock
-  stockId               Int?         // Relación opcional con Stock
-  stock                 Stock?       @relation(fields: [stockId], references: [id], onDelete: SetNull)
-  // No es necesario incluir notificaciones aquí
-  fechaCreacion     DateTime           @default(now()) // Fecha de creación de la notificación
-
-}
-
-enum EstadoVencimiento {
-  PENDIENTE
-  NOTIFICADO
-  RESUELTO
-}
-
-model Notificacion {
-  id                Int                @id @default(autoincrement())
-  mensaje           String             // Mensaje de la notificación
-  remitenteId       Int?               // Usuario que envía la notificación (opcional)
-  remitente         Usuario?           @relation("Remitente", fields: [remitenteId], references: [id])
-  tipoNotificacion  TipoNotificacion   // Tipo de notificación (enum)
-  referenciaId      Int?               // ID de referencia relacionado (por ejemplo, ID de solicitud o transferencia)
-  fechaCreacion     DateTime           @default(now()) // Fecha de creación de la notificación
-  notificacionesUsuarios NotificacionesUsuarios[]  // Relación con tabla intermedia
-
-  Usuario Usuario[] @relation("Destinatario")
-}
-
-model NotificacionesUsuarios {
-  id                Int                @id @default(autoincrement())
-  usuarioId         Int                // Usuario que recibe la notificación
-  usuario           Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  notificacionId    Int                // ID de la notificación
-  notificacion      Notificacion       @relation(fields: [notificacionId], references: [id], onDelete: Cascade)
-  leido             Boolean            @default(false)  // Indica si la notificación fue leída
-  eliminado         Boolean            @default(false)  // Indica si la notificación fue eliminada
-  leidoEn           DateTime?                          // Fecha en que se leyó
-  recibidoEn        DateTime           @default(now())  // Fecha en que se recibió la notificación
-}
-
-
-model SolicitudPrecio {
-  id                Int         @id @default(autoincrement())
-  productoId        Int
-  producto          Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  precioSolicitado  Float       // Precio solicitado por el vendedor
-  solicitadoPorId   Int         // Relación con el usuario que solicita el precio
-  solicitadoPor     Usuario     @relation("SolicitadoPor", fields: [solicitadoPorId], references: [id])
-  estado            EstadoSolicitud  @default(PENDIENTE)  // Estado de la solicitud
-  aprobadoPorId     Int?        // Admin que aprueba o rechaza la solicitud (nullable)
-  aprobadoPor       Usuario?    @relation("AprobadoPor", fields: [aprobadoPorId], references: [id])
-  fechaSolicitud    DateTime    @default(now())
-  fechaRespuesta    DateTime?   // Fecha cuando fue aprobada o rechazada
-}
-
-model Producto {
-  id                Int              @id @default(autoincrement())
-  nombre            String
-  descripcion       String?
-  stock             Stock[]          // Relación con Stock
-  categorias        Categoria[]      @relation(name: "CategoriaToProducto")
-  ventas            VentaProducto[]  // Relación con productos vendidos en varias ventas
-  codigoProducto    String           @unique  // NUEVO A APLICAR
-  creadoEn          DateTime         @default(now())
-  actualizadoEn     DateTime         @updatedAt
-  HistorialStock HistorialStock[]
-  HistorialPrecio HistorialPrecio[]
-  TransferenciaProducto TransferenciaProducto[]
-  //NUEVOS PRECIOS
-  precios           PrecioProducto[] // Relación con múltiples precios
-  SolicitudPrecio SolicitudPrecio[]
-  //NUEVA SOLICITUD TRANSFERENCIA
-  solicitudesTransferencia SolicitudTransferenciaProducto[]
-  //NUEVO PRECIO COSTO PRODUCTO
-  precioCostoActual Float?
-  // Historial de precios de costo
-  HistorialPrecioCosto HistorialPrecioCosto[]
-  //AJUSTE
-  AjusteStock AjusteStock[]
-  EliminacionProducto EliminacionProducto[]
-  EliminacionStock EliminacionStock[]
-  //PARA USARLO EN GARANTÍAS
-  Garantia Garantia[]
-  VentaEliminadaProducto VentaEliminadaProducto[]
-  Reparacion Reparacion[]
-  stockThreshold StockThreshold? // no array
-  codigoProveedor  String?   @unique
-  lineas RequisicionLinea[]
-  ResumenVenta ResumenVenta[]
-  detallesResumenVenta DetalleResumenVenta[]
-  imagenesProducto ImagenProducto[]
-  //recepciones en requisiciones
-  recepcionLineas       RequisicionRecepcionLinea[]
-  compraDetalle CompraDetalle[]
-  pedidosLineas PedidoLinea[]
-}
-
-model ImagenProducto {
-  id          Int      @id @default(autoincrement())
-  url         String   // ruta o URL de la imagen
-  public_id   String?  // ID público si se usa un servicio de almacenamiento externo  
-  altTexto    String?  // texto alternativo para accesibilidad
-  creadoEn    DateTime @default(now())
-  // relación inversa
-  producto    Producto @relation(fields: [productoId], references: [id])
-  productoId  Int
-
-  @@index([productoId])
-}
-
-model StockThreshold {
-  id           Int       @id @default(autoincrement())
-  producto     Producto  @relation(fields: [productoId], references: [id])
-  productoId   Int       @unique    // fuerza la relación 1:1
-  stockMinimo  Int       @default(0)
-  creadoEn     DateTime  @default(now())
-  actualizadoEn DateTime @updatedAt
-}
-
-// ===========================> Tablas para modulo de requisiciones
-//REQUISICION MAIN COMO TAL, LA CUAL EN EL BACK, GENERA LAS LINEAS (REQUISICION LINEA)
-model Requisicion {
-  id             Int                  @id @default(autoincrement())
-  folio          String               @unique                  // un identificador legible (p. ej. “REQ-2025-0001”)
-  fecha          DateTime             @default(now()) //fecha de creacion          // cuándo se generó
-  sucursalId     Int
-  sucursal       Sucursal             @relation(fields: [sucursalId], references: [id])
-  usuarioId      Int
-  usuario        Usuario              @relation(fields: [usuarioId], references: [id])
-  estado         RequisicionEstado    @default(PENDIENTE)       // PENDIENTE, ENVIADA, COMPLETADA…
-  observaciones  String?                                       // notas adicionales
-  totalLineas    Int                  @default(0)               // número de líneas (se puede calcular en un hook)
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  lineas         RequisicionLinea[]   // relación 1-N
-  //nuevas props
-  totalRequisicion Float?
-  fechaRecepcion       DateTime?
-  esIngresoAutomatico  Boolean    @default(false)
-  ingresadaAStock Boolean @default(false)
-  //registro de recibidos
-  recepciones RequisicionRecepcion[]
-  movimientoStock  HistorialStock[]
-  compra             Compra?              @relation
-  
-}
-
-model RequisicionLinea {
-  id               Int         @id @default(autoincrement())
-  requisicionId    Int
-  requisicion      Requisicion @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
-  productoId       Int
-  producto         Producto    @relation(fields: [productoId], references: [id])
-  cantidadActual   Int         // stock al momento de generar
-  stockMinimo      Int         // umbral usado para decidir inclusión
-  cantidadSugerida Int         // (stockMinimo − cantidadActual) o valor que decidas pedir
-  precioUnitario   Float?      // opcional: precio de compra sugerido o último precio conocido
-  createdAt        DateTime    @default(now())
-  updatedAt       DateTime     @updatedAt
-  @@index([requisicionId])
-
-  fechaExpiracion DateTime? 
-  cantidadRecibida     Int?       // stock efectivamente recibido
-  ingresadaAStock      Boolean    @default(false)
-  //recepciones
-  recepcionesLineas RequisicionRecepcionLinea[]
-    compraDetalles        CompraDetalle[]  @relation("DetalleRequisicionCompra")
-}
-//El registro de que si se registró o no la requisicion main, prueba de que se entregaron o no los productos - tienen lineas que son registros  con informacion del producto que se requirió
-model RequisicionRecepcion {
-  id             Int           @id @default(autoincrement())
-  requisicionId  Int
-  requisicion    Requisicion   @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
-  fechaRecepcion DateTime      @default(now())
-  usuarioId      Int           // usuario que confirma la recepción
-  usuario        Usuario       @relation(fields: [usuarioId], references: [id])
-  observaciones  String?       // notas o comentarios sobre la recepción
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  lineas         RequisicionRecepcionLinea[]
-  // Podrías agregar un estado si es necesario (completo, parcial, pendiente)
-  //relacion con stock:
-  stockLotes     Stock[]       @relation("StockRecepcion")
-}
-
-model RequisicionRecepcionLinea {
-  id                    Int                   @id @default(autoincrement())
-  requisicionRecepcionId Int
-  requisicionRecepcion   RequisicionRecepcion  @relation(fields: [requisicionRecepcionId], references: [id], onDelete: Cascade)
-  requisicionLineaId     Int                   // referencia a la línea original para trazabilidad
-  requisicionLinea       RequisicionLinea      @relation(fields: [requisicionLineaId], references: [id], onDelete: Cascade)
-  productoId             Int
-  producto               Producto              @relation(fields: [productoId], references: [id])
-  cantidadSolicitada     Int                   // cantidad solicitada en la requisición original (puedes replicar o calcular)
-  cantidadRecibida       Int                   // cantidad realmente recibida y agregada a stock
-  ingresadaAStock        Boolean   @default(true)  // indica si se ingresó o no el stock
-
-  createdAt              DateTime   @default(now())
-  updatedAt              DateTime   @updatedAt
-}
-
-enum RequisicionEstado {
-  BORRADOR     // aún no se ha generado formalmente
-  PENDIENTE    // creada y a la espera de aprobar/envío
-  APROBADA     // validada internamente y lista para enviar a compras
-  ENVIADA      // ya fue enviada al área de compras/proveedor
-  RECIBIDA     // confirmada la recepción parcial o total de los productos
-  COMPLETADA   // todas las líneas recibidas y la requisición cerrada
-  CANCELADA    // anulada por algún motivo
-  ENVIADA_COMPRAS
-}
-
-// ===========================> Tablas para modulo de requisiciones
-
-/// Tipo de período que resume la venta
-enum ResumenPeriodo {
-  DIARIO
-  SEMANAL
-  MENSUAL
-  CUSTOM
-}
-
-model ResumenVenta {
-  id                  Int                   @id @default(autoincrement())
-  titulo              String?
-  sucursalId          Int?                  // si quieres por sucursal
-  sucursal            Sucursal?             @relation(fields: [sucursalId], references: [id])
-  usuarioId           Int?
-  usuario             Usuario?              @relation(fields: [usuarioId], references: [id])
-  periodo             ResumenPeriodo        @default(DIARIO)
-  fechaInicio         DateTime              // p.ej. para semanal: lunes de la semana
-  fechaFin            DateTime              // p.ej. semanal: domingo de la semana
-  totalVentas         Float                 // suma de montos
-  totalTransacciones  Int                   // número de tickets/facturas
-  unidadesVendidas    Int                   // suma de unidades vendidas
-  ticketPromedio      Float?                // totalVentas / totalTransacciones
-  productoTopId       Int?                  // producto con más ventas en el período
-  productoTop         Producto?             @relation(fields: [productoTopId], references: [id])
-  cantidadProductoTop  Int?
-  creadoEn            DateTime              @default(now())
-  actualizadoEn       DateTime              @updatedAt
-
-  detalles            DetalleResumenVenta[] // opcional, para desglose por producto
-  observaciones       String?
-}
-
-model DetalleResumenVenta {
-  id               Int           @id @default(autoincrement())
-  resumenVentaId   Int
-  resumenVenta     ResumenVenta  @relation(fields: [resumenVentaId], references: [id], onDelete: Cascade)
-  productoId       Int
-  producto         Producto      @relation(fields: [productoId], references: [id])
-  cantidadVendida  Int           // unidades vendidas de este producto
-  montoVenta       Float         // total facturado de este producto
-}
-
-model HistorialPrecioCosto {
-  id                Int       @id @default(autoincrement())
-  productoId        Int
-  precioCostoAnterior Float
-  precioCostoNuevo    Float
-  fechaCambio       DateTime  @default(now())
-  modificadoPorId     Int?
-  motivoCambio           String?   //nuevo
-  sucursalId             Int?      //nuevo
-  //===RELACIONES===>
-  sucursal Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  producto          Producto   @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  modificadoPor       Usuario?   @relation(fields: [modificadoPorId], references: [id], onDelete: Cascade) // Relación con Usuario
-}
-
-
-model PrecioProducto {
-  id                Int        @id @default(autoincrement())
-  productoId        Int?
-  producto          Producto?   @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  precio            Float      // El precio de venta
-  creadoPorId       Int?        // El usuario que creó el precio (puede ser un vendedor)
-  creadoPor         Usuario?   @relation(fields: [creadoPorId], references: [id])
-  fechaCreacion     DateTime   @default(now())
-  estado            EstadoPrecio  // Estado del precio: APROBADO, PENDIENTE, RECHAZADO
-  usado             Boolean     @default(false) // Para marcar si el precio ha sido utilizado
-  tipo              TipoPrecio // Puede ser 'CREADO_POR_SOLICITUD', 'ESTANDAR', etc.
-  // MEJORAS PARA ORDEN FIJO Y FLEXIBILIDAD:
-  orden         Int           // 1, 2, 3, ...
-  rol           RolPrecio     // <--- AQUÍ tu nuevo Enum, define el "nombre" fijo del precio
-  // OPCIONALES PARA FUTURO:
-  vigenteDesde  DateTime?
-  vigenteHasta  DateTime?
-  sucursalId    Int?
-  clienteId     Int?
-}
-
-enum RolPrecio {
-  PUBLICO
-  MAYORISTA
-  ESPECIAL
-  DISTRIBUIDOR
-  PROMOCION
-  CLIENTE_ESPECIAL
-}
-
-
-model HistorialPrecio {
-  id              Int         @id @default(autoincrement())
-  productoId      Int
-  producto        Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  precioAnterior  Float
-  precioNuevo     Float
-  fechaCambio     DateTime    @default(now())
-}
-
-//=======================>
-model AjusteStock {
-  id               Int      @id @default(autoincrement())
-  producto         Producto @relation(fields: [productoId], references: [id])
-  productoId       Int
-  stock            Stock?   @relation(fields: [stockId], references: [id]) // Relación opcional al stock
-  stockId          Int?     // Campo opcional para identificar el stock modificado
-  cantidadAjustada Int
-  tipoAjuste       TipoAjuste
-  fechaHora        DateTime @default(now())
-  usuario          Usuario?  @relation(fields: [usuarioId], references: [id])
-  usuarioId        Int?
-  descripcion      String?  // Campo opcional para el motivo del ajuste
-  movimientoStock HistorialStock[]
-}
-
-
-model EliminacionStock {
-  id                      Int              @id @default(autoincrement())
-  productoId              Int              // Producto asociado al stock eliminado
-  producto                Producto         @relation(fields: [productoId], references: [id])
-
-  cantidadAnterior        Int?             // Stock previo a la eliminación
-  cantidadStockEliminada  Int?              // Cantidad que se eliminó
-  stockRestante           Int?             // Stock que quedó después de la eliminación
-
-  fechaHora               DateTime         @default(now())  // Momento de la eliminación
-
-  referenciaTipo          String?          // Tipo de evento origen ("AJUSTE", "VENCIMIENTO", etc.)
-  referenciaId            Int?             // ID de la entidad origen para trazabilidad
-
-  motivo                  String?          // Razón o comentario libre
-
-  usuarioId               Int?             // Usuario que realizó la eliminación
-  usuario                 Usuario?         @relation(fields: [usuarioId], references: [id])
-
-  sucursalId              Int?             // Sucursal donde se eliminó el stock
-  sucursal                Sucursal?        @relation(fields: [sucursalId], references: [id])
-
-  createdAt               DateTime         @default(now())
-  updatedAt               DateTime @updatedAt @default(now()) 
-  movimientoStock         HistorialStock[] // Relación con historial de movimientos
-}
-
-// Enum para tipo de ajuste
-enum TipoAjuste {
-  INCREMENTO
-  DECREMENTO
-  CORRECCION
-}
-
-model EliminacionProducto {
-  id           Int        @id @default(autoincrement())
-  producto     Producto   @relation(fields: [productoId], references: [id])
-  productoId   Int        // Referencia al producto eliminado
-  fechaHora    DateTime   @default(now())
-  usuario      Usuario?    @relation(fields: [usuarioId], references: [id])
-  usuarioId    Int?        // Usuario que realizó la eliminación
-  motivo       String?    // Razón de la eliminación (opcional)
-}
-
-model EliminacionCliente {
-  id           Int      @id @default(autoincrement())
-  cliente      Cliente  @relation(fields: [clienteId], references: [id])
-  clienteId    Int      // Referencia al cliente eliminado
-  fechaHora    DateTime @default(now())
-  usuario      Usuario?  @relation(fields: [usuarioId], references: [id])
-  usuarioId    Int?      // Usuario que realizó la eliminación
-  motivo       String?  // Razón de la eliminación (opcional)
-}
-
-model Stock {
-  id              Int         @id @default(autoincrement())
-  productoId      Int
-  cantidadInicial Int?        // Cantidad inicial de productos entregados
-  cantidad        Int
-  costoTotal      Float        // Costo total de adquisición de todos los productos en stock
-  creadoEn        DateTime     @default(now())
-  actualizadoEn   DateTime     @updatedAt @default(now())   
-  fechaIngreso    DateTime
-  fechaVencimiento DateTime?   // Fecha de vencimiento asociada al lote de productos
-  precioCosto     Float        // Precio al que se compró el producto en ese lote
-  producto        Producto     @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  entregaStockId  Int?         // Puede ser nulo si no está relacionado con una entrega específica
-  entregaStock    EntregaStock? @relation(fields: [entregaStockId], references: [id], onDelete: SetNull)
-  //OTROS
-  sucursal        Sucursal     @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  sucursalId      Int          // NUEVO: Relación con la sucursal
-  Vencimiento Vencimiento[]
-  //AJUSTES DE STOCKS
-  AjusteStock AjusteStock[]
-  //relacion con las recepciones de requisiciones
-  requisicionRecepcionId Int?   
-  requisicionRecepcion   RequisicionRecepcion? @relation("StockRecepcion", fields: [requisicionRecepcionId], references: [id], onDelete: SetNull)
-}
-
-
-
-model EntregaStock {
-  id              Int         @id @default(autoincrement())
-  proveedorId     Int?        // Relación opcional con el proveedor
-  proveedor       Proveedor?  @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
-  montoTotal      Float       // Monto total de la entrega (puede ser calculado sumando preciosCosto * cantidad)
-  fechaEntrega    DateTime    @default(now())
-  stockEntregado  Stock[]     // Relación con Stock
-  recibidoPorId   Int?        // Usuario que recibió la entrega (puede ser opcional)
-  usuarioRecibido Usuario?    @relation("UsuarioRecibido", fields: [recibidoPorId], references: [id], onDelete: SetNull)
-  //NUEVO
-  sucursalId      Int?         // NUEVO: Relación con la sucursal
-  sucursal        Sucursal?    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  //tracker
-  movimientoStock HistorialStock[]
-}
-
-model Usuario {
-  id                    Int                @id @default(autoincrement())
-  nombre                String
-  rol                   Rol                // Rol del usuario
-  contrasena            String
-  activo                Boolean            @default(true)
-  entregasRecibidas     EntregaStock[]     @relation("UsuarioRecibido")
-  correo                String             @unique
-  sucursalId            Int                // Relación con la sucursal
-  sucursal              Sucursal           @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  TransferenciaProducto TransferenciaProducto[]
-  PrecioProducto        PrecioProducto[]
-  solicitudesPrecio     SolicitudPrecio[]  @relation("SolicitadoPor")
-  solicitudesAprobadas  SolicitudPrecio[]  @relation("AprobadoPor")
-  notificacionesEnviadas  Notificacion[] @relation("Remitente")
-  notificacionesRecibidas Notificacion[] @relation("Destinatario")
-  notificacionesUsuarios  NotificacionesUsuarios[]  // Relación con tabla intermedia
-  solicitudesEnviadas      SolicitudTransferenciaProducto[] @relation("UsuarioSolicitante")
-  solicitudesAprobadasTransferencia SolicitudTransferenciaProducto[] @relation("AdministradorAprobador") // Renombrada para especificidad
-  HistorialPrecioCosto HistorialPrecioCosto[]
-  AjusteStock AjusteStock[]
-  EliminacionProducto EliminacionProducto[]
-  EliminacionCliente EliminacionCliente[]
-  EliminacionStock EliminacionStock[]
-  Garantia Garantia[]
-  regitrosGarantiaTimeline RegistroGarantia[]
-  fecha_creacion        DateTime           @default(now()) // Aplica un valor por defecto a filas nuevas y existentes
-  fecha_actualizacion DateTime @default(now()) // Esto asigna automáticamente la fecha actual.
-  VentaEliminada VentaEliminada[]
-  ventas             Venta[]            // Ventas realizadas por el usuario
-  VentaCuota VentaCuota[]
-  Cuota Cuota[]
-  Reparacion Reparacion[]
-  RegistroReparacion RegistroReparacion[]
-  MetaUsuario MetaUsuario[]
-  MetaCobros MetaCobros[]
-  DepositoCobro DepositoCobro[]
-  requisiciones Requisicion[]
-  resumenesVenta ResumenVenta[]
-  //tracker movimientos
-  movimientoStock HistorialStock[]
-  //tracker de cajas
-  cajasIniciadas RegistroCaja[] @relation("UsuarioInicio")
-  cajasCerradas  RegistroCaja[] @relation("UsuarioCierre")
-
-  // movimientos    MovimientoCaja[]
-  //recepciones de requisiciones
-  recepcionesRequisiciones RequisicionRecepcion[]
-  compras Compra[]
-  pedidos Pedido[]
-  saldoGlobalSnapshots SaldoGlobalDiario[]
-  movimientosCaja       MovimientoFinanciero[]
-}
-
-model MetaUsuario {
-  id            Int       @id @default(autoincrement())
-  usuarioId     Int       // Relación con el usuario
-  usuario       Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  sucursalId    Int       // Relación con la sucursal donde se establece la meta
-  sucursal      Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  fechaInicio   DateTime   @default(now())
-  fechaFin      DateTime   // Fin del plazo de la meta
-  montoMeta     Float      // Monto de ventas objetivo
-  montoActual   Float      @default(0) // Ventas acumuladas por el usuario dentro del plazo
-  cumplida      Boolean    @default(false) // Indica si la meta fue cumplida
-  fechaCumplida DateTime?  // Fecha en que se cumplió la meta, si aplica
-  numeroVentas  Float     // El numero de ventas hasta el momento
-  tituloMeta    String?
-  estado        EstadoMetaTienda
-  // @@index([usuarioId, sucursalId])
-}
-
-
-model MetaCobros {
-  id            Int       @id @default(autoincrement())
-  usuarioId     Int       // Relación con el usuario
-  usuario       Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  sucursalId    Int       // Relación con la sucursal donde se establece la meta
-  sucursal      Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  fechaCreado   DateTime   @default(now()) // Fecha en que se creó la meta
-
-  fechaInicio   DateTime   @default(now())
-  fechaFin      DateTime   // Fin del plazo de la meta
-  montoMeta     Float      // Monto objetivo de cobros a alcanzar
-  montoActual   Float      @default(0) // Cobros acumulados por el usuario hasta ahora
-  cumplida      Boolean    @default(false) // Indica si la meta fue cumplida
-  fechaCumplida DateTime?  // Fecha en que se cumplió la meta, si aplica
-  numeroDepositos Int      @default(0) // Número de depósitos realizados hasta el momento
-  tituloMeta      String?
-  estado        EstadoMetaCobro
-  DepositoCobro DepositoCobro[]
-}
-
-enum EstadoMetaCobro {
-  CANCELADO
-  ABIERTO
-  FINALIZADO
-  CERRADO
-}
-
-enum EstadoMetaTienda {
-  CANCELADO
-  ABIERTO
-  FINALIZADO
-  CERRADO
-
-}
-
-model DepositoCobro {
-  id              Int       @id @default(autoincrement())
-  usuarioId       Int       // Relación con el usuario que hizo el depósito
-  usuario         Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  sucursalId      Int       // Relación con la sucursal del depósito
-  sucursal        Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  numeroBoleta    String     // Número de boleta o comprobante del depósito
-  fechaRegistro   DateTime   @default(now()) // Fecha en la que se registró el depósito
-  montoDepositado Float      // Monto del depósito realizado
-  descripcion     String?    // Descripción o nota opcional sobre el depósito
-
-  metaCobroId     Int           // Relación con MetaCobros
-  metaCobro       MetaCobros     @relation(fields: [metaCobroId], references: [id], onDelete: Cascade) // Relación N:1 con MetaCobros
-}
-
-
-
-model Cliente {
-  id              Int          @id @default(autoincrement())
-  nombre          String
-  apellidos       String? 
-  telefono        String?
-  direccion       String?
-  compras         Venta[]
-  observaciones   String?
-  creadoEn        DateTime     @default(now())
-  actualizadoEn   DateTime     @updatedAt
-  municipioId     Int?         // EN UBICACION TABLA
-  municipio       Municipio?   @relation(fields: [municipioId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
-  departamentoId  Int?         // EN UBICACION TABLA
-  departamento    Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
-  EliminacionCliente EliminacionCliente[]
-  dpi             String?      // Campo DPI opcional
-  
-  @@unique([dpi, id]) // Índice compuesto que permite múltiples null en dpi
-  //PARA LAS GARANTÍAS
-  Garantia Garantia[]
-  iPInternet String? //IP PARA ENCONTRAR EL PAGO DE INTERNET
-    // Nuevas propiedades de fecha
-
-  VentaEliminada VentaEliminada[]
-  VentaCuota VentaCuota[]
-  Reparacion Reparacion[]
-  //SOFT DELETE
-  eliminado       Boolean   @default(false) // SOFT DELETE FLAG
-  fechaEliminacion DateTime?                // Opcional: cuándo fue dado de baja
-  pedidos Pedido[]
-}
-
-
-model Garantia {
-  id                 Int              @id @default(autoincrement())
-  ventaId            Int              // vinculamos con la venta
-  venta              Venta            @relation(fields: [ventaId], references: [id], onDelete: Cascade)
-  productoId         Int
-  producto           Producto         @relation(fields: [productoId], references: [id])
-  usuarioIdRecibe    Int?
-  usuarioRecibe      Usuario?         @relation(fields: [usuarioIdRecibe], references: [id])
-  proveedorId        Int?             // opcional
-  proveedor          Proveedor?       @relation(fields: [proveedorId], references: [id])
-  cantidadDevuelta   Int              // cuántas unidades está devolviendo
-  comentario         String?          // breve
-  descripcionProblema String          // detallada
-  fechaRecepcion     DateTime         @default(now())
-  estado             EstadoGarantia   @default(RECIBIDO)
-  registros          RegistroGarantia[]
-  creadoEn           DateTime         @default(now())
-  actualizadoEn      DateTime         @updatedAt
-
-  clienteId          Int
-  cliente            Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-
-  sucursalId Int?
-  sucursal Sucursal?   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  //Relacion con su tracker
-  movimientoStock HistorialStock[]
-}
-
-
-model RegistroGarantia {
-  id                Int              @id @default(autoincrement())
-  garantiaId        Int
-  garantia          Garantia         @relation(fields: [garantiaId], references: [id], onDelete: Cascade)
-
-  estado            EstadoGarantia
-  conclusion        String?
-  accionesRealizadas String?
-
-  usuarioId Int?
-  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  fechaRegistro     DateTime         @default(now())
-  actualizadoEn     DateTime         @updatedAt
-}
-
-
-enum EstadoGarantia {
-  RECIBIDO           
-  DIAGNOSTICO         
-  EN_REPARACION
-  ESPERANDO_PIEZAS     
-  REPARADO       
-  REEMPLAZADO          
-  RECHAZADO_CLIENTE   
-  CANCELADO            
-  CERRADO               
-}
-
-
-
-model Pago {
-  id              Int       @id @default(autoincrement())
-  ventaId         Int       @unique // Hacer que cada venta tenga solo un método de pago
-  venta           Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
-  monto           Float     // Monto pagado
-  metodoPago      MetodoPago // Usar el enum en lugar de String
-  fechaPago       DateTime  @default(now())
-}
-
-model HistorialStock {
-  id               Int         @id @default(autoincrement())
-  cantidadAnterior Int?
-  cantidadNueva    Int?
-  comentario       String?
-
-  tipo             TipoMovimientoStock
-  fechaCambio      DateTime    @default(now())
-
-  sucursalId       Int?
-  sucursal         Sucursal?    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-
-  usuarioId Int?
-  usuario Usuario? @relation(fields: [usuarioId], references: [id])
-
-  productoId       Int?
-  producto         Producto?    @relation(fields: [productoId], references: [id], onDelete: Cascade)
-
-  // Relaciones a los módulos que mueven inventario:
-  requisicionId Int?
-  requisicion   Requisicion? @relation(fields: [requisicionId], references: [id], onDelete: SetNull)
-
-  //rastrear venta
-  ventaId Int?
-  venta Venta? @relation(fields: [ventaId], references: [id], onDelete: SetNull)
-  //rastrear ajuste stock 
-  ajusteStockId Int?
-  ajusteStock AjusteStock? @relation(fields: [ajusteStockId], references: [id], onDelete: SetNull)
-  //rastrear eliminacionStock
-  eliminacionStockId Int?
-  eliminacionStock EliminacionStock? @relation(fields: [eliminacionStockId], references: [id], onDelete: SetNull)
-  //rastrear eliminacion venta
-  eliminacionVentaId Int?
-  eliminacionVenta VentaEliminada? @relation(fields: [eliminacionVentaId], references: [id], onDelete: SetNull)
-  //transferencia de productos
-  transferenciaProductoId Int?
-  transferenciaProducto TransferenciaProducto? @relation(fields: [transferenciaProductoId], references: [id], onDelete: SetNull)
-  //trackear entregastock
-  entregaStockId Int?
-  entregaStock EntregaStock? @relation(fields: [entregaStockId], references: [id], onDelete: SetNull)
-  //tracker las entregas de stock 
-
-  //Tracker para garantias aplicadas a un producto
-  garantiaId Int?
-  garantia Garantia? @relation(fields: [garantiaId], references: [id], onDelete: SetNull)
-
-}
-
-enum TipoMovimientoStock {
-  INGRESO_COMPRA
-  INGRESO_REQUISICION
-  INGRESO_DEVOLUCION_CLIENTE
-  INGRESO_TRANSFERENCIA
-  INGRESO_AJUSTE
-  SALIDA_VENTA
-  AJUSTE_STOCK//nuevo
-  ELIMINACION_VENTA//nuevo
-  TRANSFERENCIA//NUEVO
-  ENTREGA_STOCK//nuevo
-  SALIDA_DEVOLUCION_PROVEEDOR
-  SALIDA_AJUSTE
-  SALIDA_TRANSFERENCIA
-  SALIDA_REPARACION
-  ELIMINACION
-  ELIMINACION_STOCK
-  INVENTARIO_INICIAL
-  GARANTIA
-  OTRO
-}
-
-model VentaProducto {
-  id              Int         @id @default(autoincrement())
-  ventaId         Int         // Relación con la venta
-  productoId      Int?         // Relación con el producto
-  cantidad        Int         // Cantidad vendida del producto
-  venta           Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
-  producto        Producto?    @relation(fields: [productoId], references: [id], onDelete: SetNull)
-  creadoEn        DateTime    @default(now())  // Fecha de creación del registro
-  //NUEVA PROPIEDAD QUE REGISTRA EL PRECIO AL QUE SE VENDIÓ EL PRODUCTO, SUSTITUTO DE DE PRECIOvENTA EN TABLA PRODUCTO
-  precioVenta     Float       // Precio de venta del producto en el momento de la venta
-  estado EstadoDetalleVenta @default(VENDIDO)
-}
-
-
-model Venta {
-  id              Int         @id @default(autoincrement())
-  clienteId       Int?        // Relación opcional con un cliente//ENVIAR:OPCIONAL
-  cliente         Cliente?    @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  fechaVenta      DateTime    @default(now())
-  horaVenta       DateTime    @default(now())
-  productos       VentaProducto[]//ENVIAR
-  totalVenta      Float       // Total de la venta//ENVIAR
-  metodoPago      Pago?       // Cambia esto para permitir null
-  sucursalId      Int         // NUEVO: Relación con la sucursal que hizo la venta
-  sucursal        Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  nombreClienteFinal String?
-  telefonoClienteFinal String?
-  direccionClienteFinal String?
-  imei                String?        
-  registroCajaId    Int?        // ID del turno de caja al que pertenece la venta
-  registroCaja      RegistroCaja? @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
-  // Relación opcional con una VentaCuota
-  ventaCuota          VentaCuota?
-    //relacion con venta opcional
-  usuarioId           Int?         // Relación con el usuario que realizó la venta
-  usuario             Usuario?     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  //relacion con el movimiento
-  movimientosStock HistorialStock[]
-  //Relaciones con garantias
-  garantias Garantia[]
-  referenciaPago    String?   @unique
-  tipoComprobante   TipoComprobante @default(RECIBO)
-  @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
-}
-
-enum EstadoDetalleVenta {
-  VENDIDO
-  PARCIAL_GARANTIA
-  ANULADO
-  REEMPLAZADO
-  GARANTIA_REPARADO
-  REEMBOLSADO 
-}
-
-/// Enum para el tipo de comprobante
-enum TipoComprobante {
-  FACTURA
-  RECIBO
-}
-
-
-model TransferenciaProducto {
-  id                Int         @id @default(autoincrement())
-  productoId        Int         // Producto que se transfiere
-  producto          Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  cantidad          Int         // Cantidad de producto transferido
-  sucursalOrigenId  Int         // Sucursal de origen
-  sucursalOrigen    Sucursal    @relation("SucursalOrigen", fields: [sucursalOrigenId], references: [id], onDelete: Cascade)
-  sucursalDestinoId Int         // Sucursal de destino
-  sucursalDestino   Sucursal    @relation("SucursalDestino", fields: [sucursalDestinoId], references: [id], onDelete: Cascade)  // NUEVA RELACIÓN
-  fechaTransferencia DateTime   @default(now())
-  usuarioEncargadoId Int?        // Relación con el usuario que hace la transferencia
-  usuarioEncargado   Usuario?    @relation(fields: [usuarioEncargadoId], references: [id], onDelete: SetNull)
-  //tracker
-  movimientoStock HistorialStock[]
-}
-  
-  model SolicitudTransferenciaProducto {
-  id                    Int          @id @default(autoincrement())
-  productoId            Int          // ID del producto que se quiere transferir
-  producto              Producto     @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  cantidad              Int          // Cantidad solicitada
-  sucursalOrigenId      Int          // Sucursal de origen de la solicitud
-  sucursalOrigen        Sucursal     @relation("SucursalOrigenSolicitud", fields: [sucursalOrigenId], references: [id], onDelete: Cascade)
-  sucursalDestinoId     Int          // Sucursal de destino de la solicitud
-  sucursalDestino       Sucursal     @relation("SucursalDestinoSolicitud", fields: [sucursalDestinoId], references: [id], onDelete: Cascade)
-  usuarioSolicitanteId  Int?          // Usuario que realiza la solicitud
-  usuarioSolicitante    Usuario?      @relation("UsuarioSolicitante", fields: [usuarioSolicitanteId], references: [id], onDelete: SetNull)
-  estado                EstadoSolicitudTransferencia @default(PENDIENTE) // Estado de la solicitud
-  fechaSolicitud        DateTime     @default(now())                    // Fecha de la solicitud
-  fechaAprobacion       DateTime?                                        // Fecha de aprobación o rechazo
-  administradorId       Int?         // Admin que aprueba/rechaza la solicitud
-  administrador         Usuario?     @relation("AdministradorAprobador", fields: [administradorId], references: [id], onDelete: SetNull)
-  // motivoRechazo         String?                                          // Motivo de rechazo, si es rechazado
-}
-
-
-model Proveedor {
-  id              Int              @id @default(autoincrement())
-  nombre          String
-  correo          String?           
-  telefono        String?
-  direccion       String?
-  razonSocial     String?
-  rfc             String?
-  nombreContacto  String?
-  telefonoContacto String?
-  emailContacto   String?
-  pais            String?
-  ciudad          String?
-  codigoPostal    String?
-  latitud         Float?
-  longitud        Float?
-  entregasStock   EntregaStock[]
-  activo          Boolean          @default(true)
-  notas           String?
-  creadoEn        DateTime         @default(now())
-  actualizadoEn   DateTime         @updatedAt
-  // RegistroGarantia RegistroGarantia[]
-  //REFERNCIA AL PRIMER TICKET DE GARANTIA
-  Garantia Garantia[]
-  //REFERNCIA AL registro final
-  compras Compra[]
-  movimientosCaja MovimientoFinanciero[]
-}
-
-model Categoria {
-  id              Int              @id @default(autoincrement())
-  nombre          String           @unique()
-  productos       Producto[]       @relation(name: "CategoriaToProducto")
-}
-
-model Departamento {
-  id              Int         @id @default(autoincrement())
-  nombre          String      @unique
-  municipios      Municipio[] // Relación con municipios
-  clientes        Cliente[]   // Relación con los clientes
-}
-
-model Municipio {
-  id              Int         @id @default(autoincrement())
-  nombre          String      @unique
-  departamentoId  Int
-  departamento    Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
-  clientes        Cliente[]   // Relación con los clientes
-}
+// ============================================================================
+// [S1] CATÁLOGOS/ENUMS GLOBALES BÁSICOS
+// ============================================================================
 
 enum Rol {
   ADMIN
@@ -1509,12 +56,12 @@ enum TipoSucursal {
 }
 
 enum MetodoPago {
-  CONTADO//quitar en su momento y cambiar en ventas
+  CONTADO // quitar en su momento y cambiar en ventas
   EFECTIVO
   TRANSFERENCIA
   TARJETA
-  CHEQUE             // banco
-  CREDITO// a futuro pero de momento no lo voy a usar
+  CHEQUE // banco
+  CREDITO // a futuro pero de momento no lo voy a usar
   // NUEVOS
   // DEPOSITO_VENTANILLA // depósito en ventanilla (usamos flags para distinguir a quién)
   OTRO // opcional no lo uso de momento
@@ -1550,10 +97,1622 @@ enum EstadoSolicitud {
   RECHAZADO
 }
 
+// ============================================================================
+// [S2] SUCURSALES Y USUARIOS (CORE)
+// ============================================================================
+
+model Sucursal {
+  id                           Int                              @id @default(autoincrement())
+  nombre                       String // Nombre de la sucursal
+  direccion                    String? // Dirección física de la sucursal
+  telefono                     String? // Teléfono de contacto
+  pbx                          String?
+  productos                    Stock[] // Relación con el stock de productos de la sucursal
+  usuarios                     Usuario[] // Relación con los empleados de la sucursal
+  creadoEn                     DateTime                         @default(now())
+  actualizadoEn                DateTime                         @updatedAt
+  tipoSucursal                 TipoSucursal
+  estadoOperacion              Boolean                          @default(true) // Activa o inactiva
+  Venta                        Venta[]
+  TransferenciaProducto        TransferenciaProducto[]          @relation("SucursalOrigen")
+  TransferenciaProductoDestino TransferenciaProducto[]          @relation("SucursalDestino") // NUEVA RELACIÓN
+  EntregaStock                 EntregaStock[]
+  solicitudesOrigen            SolicitudTransferenciaProducto[] @relation("SucursalOrigenSolicitud")
+  solicitudesDestino           SolicitudTransferenciaProducto[] @relation("SucursalDestinoSolicitud")
+  EliminacionStock             EliminacionStock[]
+  RegistroCaja                 RegistroCaja[]
+
+  saldosDiarios          SucursalSaldoDiario[]
+  VentaEliminada         VentaEliminada[]
+  VentaCuota             VentaCuota[]
+  PlantillaComprobante   PlantillaComprobante[]
+  Reparacion             Reparacion[]
+  MetaUsuario            MetaUsuario[]
+  MetaCobros             MetaCobros[]
+  DepositoCobro          DepositoCobro[]
+  requisiciones          Requisicion[]
+  resumenesVenta         ResumenVenta[]
+  HistorialStock         HistorialStock[]
+  HistorialPrecioCosto   HistorialPrecioCosto[]
+  garantias              Garantia[]
+  compras                Compra[]
+  pedidos                Pedido[]
+  movimientosFinancieros MovimientoFinanciero[]
+}
+
+model Usuario {
+  id                                Int                              @id @default(autoincrement())
+  nombre                            String
+  rol                               Rol // Rol del usuario
+  contrasena                        String
+  activo                            Boolean                          @default(true)
+  entregasRecibidas                 EntregaStock[]                   @relation("UsuarioRecibido")
+  correo                            String                           @unique
+  sucursalId                        Int // Relación con la sucursal
+  sucursal                          Sucursal                         @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  TransferenciaProducto             TransferenciaProducto[]
+  PrecioProducto                    PrecioProducto[]
+  solicitudesPrecio                 SolicitudPrecio[]                @relation("SolicitadoPor")
+  solicitudesAprobadas              SolicitudPrecio[]                @relation("AprobadoPor")
+  notificacionesEnviadas            Notificacion[]                   @relation("Remitente")
+  notificacionesRecibidas           Notificacion[]                   @relation("Destinatario")
+  notificacionesUsuarios            NotificacionesUsuarios[] // Relación con tabla intermedia
+  solicitudesEnviadas               SolicitudTransferenciaProducto[] @relation("UsuarioSolicitante")
+  solicitudesAprobadasTransferencia SolicitudTransferenciaProducto[] @relation("AdministradorAprobador") // Renombrada para especificidad
+  HistorialPrecioCosto              HistorialPrecioCosto[]
+  AjusteStock                       AjusteStock[]
+  EliminacionProducto               EliminacionProducto[]
+  EliminacionCliente                EliminacionCliente[]
+  EliminacionStock                  EliminacionStock[]
+  Garantia                          Garantia[]
+  regitrosGarantiaTimeline          RegistroGarantia[]
+  fecha_creacion                    DateTime                         @default(now()) // Aplica un valor por defecto a filas nuevas y existentes
+  fecha_actualizacion               DateTime                         @default(now()) // Esto asigna automáticamente la fecha actual.
+  VentaEliminada                    VentaEliminada[]
+  ventas                            Venta[] // Ventas realizadas por el usuario
+  VentaCuota                        VentaCuota[]
+  Cuota                             Cuota[]
+  Reparacion                        Reparacion[]
+  RegistroReparacion                RegistroReparacion[]
+  MetaUsuario                       MetaUsuario[]
+  MetaCobros                        MetaCobros[]
+  DepositoCobro                     DepositoCobro[]
+  requisiciones                     Requisicion[]
+  resumenesVenta                    ResumenVenta[]
+  //tracker movimientos
+  movimientoStock                   HistorialStock[]
+  //tracker de cajas
+  cajasIniciadas                    RegistroCaja[]                   @relation("UsuarioInicio")
+  cajasCerradas                     RegistroCaja[]                   @relation("UsuarioCierre")
+
+  // recepciones de requisiciones
+  recepcionesRequisiciones RequisicionRecepcion[]
+  compras                  Compra[]
+  pedidos                  Pedido[]
+  saldoGlobalSnapshots     SaldoGlobalDiario[]
+  movimientosCaja          MovimientoFinanciero[]
+}
+
+// ============================================================================
+// [S3] PRODUCTOS Y CATÁLOGOS DE PRODUCTO
+// ============================================================================
+
+model Producto {
+  id          Int             @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  // ❌ QUITAR: stock por producto (ahora es por SKU)
+  // stock             Stock[]
+  categorias  Categoria[]     @relation(name: "CategoriaToProducto")
+  ventas      VentaProducto[]
+
+  codigoProducto String   @unique
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+  // ❌ QUITAR: historial por producto (ahora será por SKU)
+
+  HistorialPrecio       HistorialPrecio[]
+  TransferenciaProducto TransferenciaProducto[]
+
+  // Precios (mantener; luego agregaremos soporte opcional por SKU)
+  precios                  PrecioProducto[]
+  SolicitudPrecio          SolicitudPrecio[]
+  solicitudesTransferencia SolicitudTransferenciaProducto[]
+  // ✅ Recomendado: usar Decimal para dinero
+  precioCostoActual        Decimal?                         @db.Decimal(12, 4)
+
+  HistorialPrecioCosto HistorialPrecioCosto[]
+  // Estos módulos más adelante los iremos apuntando a SKU (por ahora puedes dejarlos si aún referencian Producto):
+  AjusteStock          AjusteStock[]
+  EliminacionProducto  EliminacionProducto[]
+  EliminacionStock     EliminacionStock[]
+
+  Garantia               Garantia[]
+  VentaEliminadaProducto VentaEliminadaProducto[]
+  Reparacion             Reparacion[]
+
+  stockThreshold  StockThreshold?
+  codigoProveedor String?         @unique
+
+  lineas               RequisicionLinea[]
+  ResumenVenta         ResumenVenta[]
+  detallesResumenVenta DetalleResumenVenta[]
+  imagenesProducto     ImagenProducto[]
+
+  recepcionLineas RequisicionRecepcionLinea[]
+  compraDetalle   CompraDetalle[]
+  pedidosLineas   PedidoLinea[]
+  // Unidad base para conversiones (ML, GR, etc.)
+  unidadBase      UnidadMedida                @default(UNIDAD)
+  // ✅ La relación clave operativa ahora:
+  skus            ProductoSKU[]
+}
+
+model Categoria {
+  id        Int        @id @default(autoincrement())
+  nombre    String     @unique()
+  productos Producto[] @relation(name: "CategoriaToProducto")
+}
+
+model ImagenProducto {
+  id         Int      @id @default(autoincrement())
+  url        String // ruta o URL de la imagen
+  public_id  String? // ID público si se usa un servicio de almacenamiento externo  
+  altTexto   String? // texto alternativo para accesibilidad
+  creadoEn   DateTime @default(now())
+  // relación inversa
+  producto   Producto @relation(fields: [productoId], references: [id])
+  productoId Int
+
+  @@index([productoId])
+}
+
+model StockThreshold {
+  id            Int      @id @default(autoincrement())
+  producto      Producto @relation(fields: [productoId], references: [id])
+  productoId    Int      @unique // fuerza la relación 1:1
+  stockMinimo   Int      @default(0)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+model SolicitudPrecio {
+  id               Int             @id @default(autoincrement())
+  productoId       Int
+  producto         Producto        @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  precioSolicitado Decimal @db.Decimal(12,4) // Precio solicitado por el vendedor
+  solicitadoPorId  Int // Relación con el usuario que solicita el precio
+  solicitadoPor    Usuario         @relation("SolicitadoPor", fields: [solicitadoPorId], references: [id])
+  estado           EstadoSolicitud @default(PENDIENTE) // Estado de la solicitud
+  aprobadoPorId    Int? // Admin que aprueba o rechaza la solicitud (nullable)
+  aprobadoPor      Usuario?        @relation("AprobadoPor", fields: [aprobadoPorId], references: [id])
+  fechaSolicitud   DateTime        @default(now())
+  fechaRespuesta   DateTime? // Fecha cuando fue aprobada o rechazada
+}
+
+model PrecioProducto {
+  id Int @id @default(autoincrement())
+
+  // Puede apuntar al Producto (precio global) O al SKU (precio específico)
+  productoId Int?
+  producto   Producto? @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  productoSkuId Int?
+  sku           ProductoSKU? @relation("PrecioToSku", fields: [productoSkuId], references: [id], onDelete: Cascade)
+
+  // Dinero en Decimal (evita Float para precios)
+  precio Decimal @db.Decimal(12, 4)
+
+  creadoPorId Int?
+  creadoPor   Usuario? @relation(fields: [creadoPorId], references: [id])
+
+  fechaCreacion DateTime     @default(now())
+  estado        EstadoPrecio
+  usado         Boolean      @default(false)
+  tipo          TipoPrecio
+  orden         Int
+  rol           RolPrecio
+
+  // Vigencias y segmentaciones opcionales
+  vigenteDesde DateTime?
+  vigenteHasta DateTime?
+  sucursalId   Int?
+  clienteId    Int?
+
+  // Índices prácticos
+  @@index([productoId])
+  @@index([productoSkuId])
+  @@index([rol, tipo])
+  @@index([estado])
+}
+
+enum RolPrecio {
+  PUBLICO
+  AGROSERVICIO
+  FINCA
+  DISTRIBUIDOR
+  PROMOCION
+}
+
+model HistorialPrecio {
+  id             Int      @id @default(autoincrement())
+  productoId     Int
+  producto       Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  precioAnterior Decimal @db.Decimal(12,4)
+  precioNuevo    Decimal @db.Decimal(12,4)
+  fechaCambio    DateTime @default(now())
+}
+
+model HistorialPrecioCosto {
+  id                  Int       @id @default(autoincrement())
+  productoId          Int
+  precioCostoAnterior Decimal @db.Decimal(12,4)
+  precioCostoNuevo    Decimal @db.Decimal(12,4)
+  fechaCambio         DateTime  @default(now())
+  modificadoPorId     Int?
+  motivoCambio        String? //nuevo
+  sucursalId          Int? //nuevo
+  //===RELACIONES===>
+  sucursal            Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  producto            Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  modificadoPor       Usuario?  @relation(fields: [modificadoPorId], references: [id], onDelete: Cascade) // Relación con Usuario
+}
+
+model FormatoPresentacion {
+  id              Int              @id @default(autoincrement())
+  nombre          String
+  tipo            TipoPresentacion
+  unidadContenido UnidadMedida
+  contenido       Decimal          @db.Decimal(12, 4)
+  skus            ProductoSKU[]    @relation("FormatoToSku")
+
+  @@unique([tipo, unidadContenido, contenido])
+}
+
+model ProductoSKU {
+  id         Int      @id @default(autoincrement())
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  formatoId Int
+  formato   FormatoPresentacion @relation("FormatoToSku", fields: [formatoId], references: [id], onDelete: Restrict)
+
+  nombreSKU    String
+  sku          String?
+  codigoBarras String? @unique
+  activo       Boolean @default(true)
+
+  factorConversionBase Decimal  @db.Decimal(12, 6)
+  precioCostoActual    Decimal? @db.Decimal(12, 4)
+
+  esDefaultVenta  Boolean @default(false)
+  esDefaultCompra Boolean @default(false)
+
+  // (ya tenías) back-relation a lotes de stock
+  lotes                Stock[]
+  // 🔁 back-relation a HistorialStock (opcional, pero requerido por tu error)
+  movimientosHistorial HistorialStock[]   @relation("SkuToHistorial")
+  // Back-relation hacia precios por SKU
+  precios              PrecioProducto[]   @relation("PrecioToSku")
+  requisicionLineas    RequisicionLinea[] @relation("SkuToRequisicionLinea")
+
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@unique([productoId, formatoId])
+  @@index([productoId])
+  @@index([formatoId])
+}
+
+enum UnidadMedida {
+  UNIDAD
+  ML
+  L
+  GR
+  KG
+}
+
+enum TipoPresentacion {
+  UNITARIA
+  BOTELLA
+  BOLSA
+  CAJA
+  SACO
+  BALDE
+  BIDON
+}
+
+// ============================================================================
+// [S4] INVENTARIO / STOCK
+// ============================================================================
+
+model Stock {
+  id            Int         @id @default(autoincrement())
+  // 🔗 SKU
+  productoSkuId Int
+  sku           ProductoSKU @relation(fields: [productoSkuId], references: [id], onDelete: Cascade)
+
+  // Cantidades y costos (dinero en Decimal)
+  cantidadInicial Int?
+  cantidad        Int
+  precioCosto     Decimal @db.Decimal(12, 4) // costo unitario del SKU en este lote
+  costoTotal      Decimal @db.Decimal(14, 4) // cantidad * precioCosto (si prefieres, puedes calcularlo en runtime)
+
+  // Trazabilidad de lote
+  fechaIngreso     DateTime
+  fechaVencimiento DateTime?
+  loteCodigo       String? // número/lote del proveedor
+  fabricadoEn      DateTime? // opcional
+
+  // Ubicación
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  // Origen del lote (compra/entrega)
+  entregaStockId Int?
+  entregaStock   EntregaStock? @relation(fields: [entregaStockId], references: [id], onDelete: SetNull)
+
+  // Relaciones existentes
+  vencimientos           Vencimiento[] // (antes: Vencimiento)
+  ajustes                AjusteStock[] // (antes: AjusteStock)
+  requisicionRecepcionId Int?
+  requisicionRecepcion   RequisicionRecepcion? @relation("StockRecepcion", fields: [requisicionRecepcionId], references: [id], onDelete: SetNull)
+
+  // 🔁 back-relation a HistorialStock
+  movimientosHistorial HistorialStock[] @relation("StockToHistorial")
+
+  // Timestamps
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  // Índices útiles
+  @@index([productoSkuId, sucursalId])
+  @@index([productoSkuId, fechaIngreso]) // FIFO
+  @@index([sucursalId, fechaVencimiento]) // alertas de vencimiento por sucursal
+}
+
+model EntregaStock {
+  id              Int              @id @default(autoincrement())
+  proveedorId     Int? // Relación opcional con el proveedor
+  proveedor       Proveedor?       @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  montoTotal      Decimal @db.Decimal(14,4) // Monto total de la entrega (puede ser calculado sumando preciosCosto * cantidad)
+  fechaEntrega    DateTime         @default(now())
+  stockEntregado  Stock[] // Relación con Stock
+  recibidoPorId   Int? // Usuario que recibió la entrega (puede ser opcional)
+  usuarioRecibido Usuario?         @relation("UsuarioRecibido", fields: [recibidoPorId], references: [id], onDelete: SetNull)
+  //NUEVO
+  sucursalId      Int? // NUEVO: Relación con la sucursal
+  sucursal        Sucursal?        @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  //tracker
+  movimientoStock HistorialStock[]
+}
+
+model HistorialStock {
+  id               Int     @id @default(autoincrement())
+  cantidadAnterior Int?
+  cantidadNueva    Int?
+  comentario       String?
+
+  tipo        TipoMovimientoStock
+  fechaCambio DateTime            @default(now())
+
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  // ✅ SKU afectado (obligatorio)
+  productoSkuId Int
+  sku           ProductoSKU @relation("SkuToHistorial", fields: [productoSkuId], references: [id], onDelete: Cascade)
+
+  // ✅ Lote/Stock afectado (opcional)
+  stockId Int?
+  stock   Stock? @relation("StockToHistorial", fields: [stockId], references: [id], onDelete: SetNull)
+
+  // Módulos que mueven inventario
+  requisicionId Int?
+  requisicion   Requisicion? @relation(fields: [requisicionId], references: [id], onDelete: SetNull)
+
+  ventaId Int?
+  venta   Venta? @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+
+  ajusteStockId Int?
+  ajusteStock   AjusteStock? @relation(fields: [ajusteStockId], references: [id], onDelete: SetNull)
+
+  eliminacionStockId Int?
+  eliminacionStock   EliminacionStock? @relation(fields: [eliminacionStockId], references: [id], onDelete: SetNull)
+
+  eliminacionVentaId Int?
+  eliminacionVenta   VentaEliminada? @relation(fields: [eliminacionVentaId], references: [id], onDelete: SetNull)
+
+  transferenciaProductoId Int?
+  transferenciaProducto   TransferenciaProducto? @relation(fields: [transferenciaProductoId], references: [id], onDelete: SetNull)
+
+  entregaStockId Int?
+  entregaStock   EntregaStock? @relation(fields: [entregaStockId], references: [id], onDelete: SetNull)
+
+  garantiaId Int?
+  garantia   Garantia? @relation(fields: [garantiaId], references: [id], onDelete: SetNull)
+
+  @@index([productoSkuId, fechaCambio])
+  @@index([sucursalId, fechaCambio])
+}
+
+enum TipoMovimientoStock {
+  INGRESO_COMPRA
+  INGRESO_REQUISICION
+  INGRESO_DEVOLUCION_CLIENTE
+  INGRESO_TRANSFERENCIA
+  INGRESO_AJUSTE
+  SALIDA_VENTA
+  AJUSTE_STOCK // nuevo
+  ELIMINACION_VENTA // nuevo
+  TRANSFERENCIA // NUEVO
+  ENTREGA_STOCK // nuevo
+  SALIDA_DEVOLUCION_PROVEEDOR
+  SALIDA_AJUSTE
+  SALIDA_TRANSFERENCIA
+  SALIDA_REPARACION
+  ELIMINACION
+  ELIMINACION_STOCK
+  INVENTARIO_INICIAL
+  GARANTIA
+  OTRO
+}
+
+model AjusteStock {
+  id               Int              @id @default(autoincrement())
+  producto         Producto         @relation(fields: [productoId], references: [id])
+  productoId       Int
+  stock            Stock?           @relation(fields: [stockId], references: [id]) // Relación opcional al stock
+  stockId          Int? // Campo opcional para identificar el stock modificado
+  cantidadAjustada Int
+  tipoAjuste       TipoAjuste
+  fechaHora        DateTime         @default(now())
+  usuario          Usuario?         @relation(fields: [usuarioId], references: [id])
+  usuarioId        Int?
+  descripcion      String? // Campo opcional para el motivo del ajuste
+  movimientoStock  HistorialStock[]
+}
+
+enum TipoAjuste {
+  INCREMENTO
+  DECREMENTO
+  CORRECCION
+}
+
+model EliminacionStock {
+  id         Int      @id @default(autoincrement())
+  productoId Int // Producto asociado al stock eliminado
+  producto   Producto @relation(fields: [productoId], references: [id])
+
+  cantidadAnterior       Int? // Stock previo a la eliminación
+  cantidadStockEliminada Int? // Cantidad que se eliminó
+  stockRestante          Int? // Stock que quedó después de la eliminación
+
+  fechaHora DateTime @default(now()) // Momento de la eliminación
+
+  referenciaTipo String? // Tipo de evento origen ("AJUSTE", "VENCIMIENTO", etc.)
+  referenciaId   Int? // ID de la entidad origen para trazabilidad
+
+  motivo String? // Razón o comentario libre
+
+  usuarioId Int? // Usuario que realizó la eliminación
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  sucursalId Int? // Sucursal donde se eliminó el stock
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @default(now()) @updatedAt
+  movimientoStock HistorialStock[] // Relación con historial de movimientos
+}
+
+model EliminacionProducto {
+  id         Int      @id @default(autoincrement())
+  producto   Producto @relation(fields: [productoId], references: [id])
+  productoId Int // Referencia al producto eliminado
+  fechaHora  DateTime @default(now())
+  usuario    Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioId  Int? // Usuario que realizó la eliminación
+  motivo     String? // Razón de la eliminación (opcional)
+}
+
+model EliminacionCliente {
+  id        Int      @id @default(autoincrement())
+  cliente   Cliente  @relation(fields: [clienteId], references: [id])
+  clienteId Int // Referencia al cliente eliminado
+  fechaHora DateTime @default(now())
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioId Int? // Usuario que realizó la eliminación
+  motivo    String? // Razón de la eliminación (opcional)
+}
+
+model Vencimiento {
+  id               Int               @id @default(autoincrement())
+  fechaVencimiento DateTime // Fecha de vencimiento
+  estado           EstadoVencimiento @default(PENDIENTE) // Estado del vencimiento (pendiente, notificado, etc.)
+  descripcion      String? // Descripción del vencimiento (opcional)
+
+  // Relación con Stock
+  stockId       Int? // Relación opcional con Stock
+  stock         Stock?   @relation(fields: [stockId], references: [id], onDelete: SetNull)
+  // No es necesario incluir notificaciones aquí
+  fechaCreacion DateTime @default(now()) // Fecha de creación de la notificación
+}
+
+enum EstadoVencimiento {
+  PENDIENTE
+  NOTIFICADO
+  RESUELTO
+}
+
+// ============================================================================
+// [S5] PROVEEDORES
+// ============================================================================
+
+model Proveedor {
+  id               Int                    @id @default(autoincrement())
+  nombre           String
+  correo           String?
+  telefono         String?
+  direccion        String?
+  razonSocial      String?
+  rfc              String?
+  nombreContacto   String?
+  telefonoContacto String?
+  emailContacto    String?
+  pais             String?
+  ciudad           String?
+  codigoPostal     String?
+  latitud          Float?
+  longitud         Float?
+  entregasStock    EntregaStock[]
+  activo           Boolean                @default(true)
+  notas            String?
+  creadoEn         DateTime               @default(now())
+  actualizadoEn    DateTime               @updatedAt
+  //REFERENCIA AL PRIMER TICKET DE GARANTIA
+  Garantia         Garantia[]
+  //REFERENCIA AL registro final
+  compras          Compra[]
+  movimientosCaja  MovimientoFinanciero[]
+}
+
+// ============================================================================
+// [S6] CLIENTES Y VENTAS (incluye Garantías y Ventas a Cuotas)
+// ============================================================================
+
+model Cliente {
+  id                 Int                  @id @default(autoincrement())
+  nombre             String
+  apellidos          String?
+  telefono           String?
+  direccion          String?
+  compras            Venta[]
+  observaciones      String?
+  creadoEn           DateTime             @default(now())
+  actualizadoEn      DateTime             @updatedAt
+  municipioId        Int? // EN UBICACION TABLA
+  municipio          Municipio?           @relation(fields: [municipioId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
+  departamentoId     Int? // EN UBICACION TABLA
+  departamento       Departamento?        @relation(fields: [departamentoId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
+  EliminacionCliente EliminacionCliente[]
+  dpi                String? // Campo DPI opcional
+  //PARA LAS GARANTÍAS
+  Garantia           Garantia[]
+  iPInternet         String? //IP PARA ENCONTRAR EL PAGO DE INTERNET
+
+  VentaEliminada   VentaEliminada[]
+  VentaCuota       VentaCuota[]
+  Reparacion       Reparacion[]
+  //SOFT DELETE
+  eliminado        Boolean          @default(false) // SOFT DELETE FLAG
+  fechaEliminacion DateTime? // Opcional: cuándo fue dado de baja
+  pedidos          Pedido[]
+
+  @@unique([dpi, id]) // Índice compuesto que permite múltiples null en dpi
+}
+
+model Venta {
+  id                    Int              @id @default(autoincrement())
+  clienteId             Int? // Relación opcional con un cliente//ENVIAR:OPCIONAL
+  cliente               Cliente?         @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  fechaVenta            DateTime         @default(now())
+  horaVenta             DateTime         @default(now())
+  productos             VentaProducto[] //ENVIAR
+  totalVenta            Decimal @db.Decimal(14,4) // Total de la venta//ENVIAR
+  metodoPago            Pago? // Cambia esto para permitir null
+  sucursalId            Int // NUEVO: Relación con la sucursal que hizo la venta
+  sucursal              Sucursal         @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  nombreClienteFinal    String?
+  telefonoClienteFinal  String?
+  direccionClienteFinal String?
+  imei                  String?
+  registroCajaId        Int? // ID del turno de caja al que pertenece la venta
+  registroCaja          RegistroCaja?    @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
+  // Relación opcional con una VentaCuota
+  ventaCuota            VentaCuota?
+  //relacion con venta opcional
+  usuarioId             Int? // Relación con el usuario que realizó la venta
+  usuario               Usuario?         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  //relacion con el movimiento
+  movimientosStock      HistorialStock[]
+  //Relaciones con garantias
+  garantias             Garantia[]
+  referenciaPago        String?          @unique
+  tipoComprobante       TipoComprobante  @default(RECIBO)
+
+  @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
+}
+
+enum TipoComprobante {
+  FACTURA
+  RECIBO
+}
+
+model VentaProducto {
+  id          Int                @id @default(autoincrement())
+  ventaId     Int // Relación con la venta
+  productoId  Int? // Relación con el producto
+  cantidad    Int // Cantidad vendida del producto
+  venta       Venta              @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto    Producto?          @relation(fields: [productoId], references: [id], onDelete: SetNull)
+  creadoEn    DateTime           @default(now()) // Fecha de creación del registro
+  //NUEVA PROPIEDAD QUE REGISTRA EL PRECIO AL QUE SE VENDIÓ EL PRODUCTO, SUSTITUTO DE DE PRECIOvENTA EN TABLA PRODUCTO
+  precioVenta Decimal @db.Decimal(12,4) // Precio de venta del producto en el momento de la venta
+  estado      EstadoDetalleVenta @default(VENDIDO)
+}
+
+enum EstadoDetalleVenta {
+  VENDIDO
+  PARCIAL_GARANTIA
+  ANULADO
+  REEMPLAZADO
+  GARANTIA_REPARADO
+  REEMBOLSADO
+}
+
+model Pago {
+  id         Int        @id @default(autoincrement())
+  ventaId    Int        @unique // Hacer que cada venta tenga solo un método de pago
+  venta      Venta      @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  monto      Decimal @db.Decimal(14,4) // Monto pagado
+  metodoPago MetodoPago // Usar el enum en lugar de String
+  fechaPago  DateTime   @default(now())
+}
+
+model VentaEliminada {
+  id               Int      @id @default(autoincrement())
+  usuarioId        Int // ID del usuario que realizó la eliminación
+  usuario          Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  motivo           String // Motivo de la eliminación
+  totalVenta       Decimal @db.Decimal(14,4) // Total de la venta
+  clienteId        Int? // ID del usuario que realizó la eliminación
+  cliente          Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  fechaEliminacion DateTime @default(now()) // Fecha y hora de la eliminación
+  sucursalId       Int // ID de la sucursal a la que pertenece la venta eliminada
+  sucursal         Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  VentaEliminadaProducto VentaEliminadaProducto[] // Relación con los productos de la venta eliminada
+  movimientoStock        HistorialStock[]
+}
+
+model VentaEliminadaProducto {
+  id               Int            @id @default(autoincrement())
+  ventaEliminadaId Int // Relación con VentaEliminada
+  ventaEliminada   VentaEliminada @relation(fields: [ventaEliminadaId], references: [id], onDelete: Cascade)
+  productoId       Int? // Relación con Producto
+  producto         Producto?      @relation(fields: [productoId], references: [id], onDelete: SetNull) // Permite que el producto sea eliminado sin romper la relación
+  cantidad         Int // Cantidad del producto en la venta
+  precioVenta      Decimal @db.Decimal(12,4) // Precio al que se vendió el producto
+  creadoEn         DateTime       @default(now()) // Fecha de creación del registro
+}
+
+model Garantia {
+  id                  Int                @id @default(autoincrement())
+  ventaId             Int // vinculamos con la venta
+  venta               Venta              @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  productoId          Int
+  producto            Producto           @relation(fields: [productoId], references: [id])
+  usuarioIdRecibe     Int?
+  usuarioRecibe       Usuario?           @relation(fields: [usuarioIdRecibe], references: [id])
+  proveedorId         Int? // opcional
+  proveedor           Proveedor?         @relation(fields: [proveedorId], references: [id])
+  cantidadDevuelta    Int // cuántas unidades está devolviendo
+  comentario          String? // breve
+  descripcionProblema String // detallada
+  fechaRecepcion      DateTime           @default(now())
+  estado              EstadoGarantia     @default(RECIBIDO)
+  registros           RegistroGarantia[]
+  creadoEn            DateTime           @default(now())
+  actualizadoEn       DateTime           @updatedAt
+
+  clienteId Int
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  sucursalId      Int?
+  sucursal        Sucursal?        @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  //Relacion con su tracker
+  movimientoStock HistorialStock[]
+}
+
+model RegistroGarantia {
+  id         Int      @id @default(autoincrement())
+  garantiaId Int
+  garantia   Garantia @relation(fields: [garantiaId], references: [id], onDelete: Cascade)
+
+  estado             EstadoGarantia
+  conclusion         String?
+  accionesRealizadas String?
+
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  fechaRegistro DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+enum EstadoGarantia {
+  RECIBIDO
+  DIAGNOSTICO
+  EN_REPARACION
+  ESPERANDO_PIEZAS
+  REPARADO
+  REEMPLAZADO
+  RECHAZADO_CLIENTE
+  CANCELADO
+  CERRADO
+}
+
+model VentaCuota {
+  id                   Int         @id @default(autoincrement())
+  clienteId            Int // Cliente relacionado
+  cliente              Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  usuarioId            Int // Usuario que autorizó la venta
+  usuario              Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursalId           Int // Sucursal donde se realizó la venta
+  sucursal             Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  totalVenta           Decimal @db.Decimal(14,4) // Monto total de la venta
+  cuotaInicial         Decimal @db.Decimal(14,4) // Monto inicial pagado
+  cuotasTotales        Int // Número total de cuotas
+  fechaInicio          DateTime    @default(now()) // Fecha en que se inició la venta a crédito
+  estado               EstadoCuota @default(ACTIVA) // Enum para manejar el estado de la venta
+  cuotas               Cuota[] // Relación con las cuotas individuales
+  // productos           VentaProducto[] // Relación con los productos vendidos
+  creadoEn             DateTime    @default(now())
+  actualizadoEn        DateTime    @updatedAt
+  dpi                  String
+  testigos             Json
+  fechaContrato        DateTime    @default(now()) //
+  montoVenta           Decimal @db.Decimal(14,4)
+  garantiaMeses        Int
+  totalPagado          Decimal @db.Decimal(14,4)  @default(0) // Total pagado hasta el momento (se actualizará con cada pago)
+  diasEntrePagos       Int         @default(0)
+  interes              Int         @default(0) // Porcentaje de interés aplicado al crédito (por ejemplo, 15 para 15%)
+  comentario           String?
+  //
+  // Relación directa con la venta original
+  ventaId              Int?        @unique
+  venta                Venta?      @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  montoTotalConInteres Int?
+  //PAGOS QUE TIENE QUE HACER
+}
+
+model Cuota {
+  id               Int        @id @default(autoincrement())
+  ventaCuotaId     Int // Relación con la venta a cuotas
+  ventaCuota       VentaCuota @relation(fields: [ventaCuotaId], references: [id], onDelete: Cascade)
+  monto            Decimal @db.Decimal(14,4) // Monto de la cuota
+  fechaVencimiento DateTime? // Fecha en que debe realizarse el pago
+  fechaPago        DateTime? // ya no es default, sino que la actualizaremos cuando hagamos el pago
+  estado           EstadoPago @default(PENDIENTE) // Estado de la cuota
+  usuarioId        Int? // Usuario que recibió el pago (null si no se ha pagado)
+  usuario          Usuario?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  creadoEn         DateTime   @default(now())
+  actualizadoEn    DateTime   @updatedAt
+  comentario       String?
+  //1. MONTO QUE TIENE QUE PAGAR
+  montoEsperado    Decimal @db.Decimal(14,4)
+  // 2. Saldo pendiente (calculable)
+}
+
+enum EstadoPago {
+  PENDIENTE
+  PAGADA
+  ATRASADA
+}
+
+enum EstadoCuota {
+  ACTIVA
+  COMPLETADA
+  CANCELADA
+}
+
+model PlantillaComprobante {
+  id            Int       @id @default(autoincrement())
+  nombre        String // Nombre o tipo de plantilla (Ej. "Plantilla Cuota Teléfonos")
+  texto         String // Texto enriquecido de la plantilla (puede ser un string largo o HTML)
+  sucursalId    Int?
+  sucursal      Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  creadoEn      DateTime  @default(now())
+  actualizadoEn DateTime  @updatedAt
+}
+
+// ============================================================================
+// [S7] TALLER / REPARACIONES
+// ============================================================================
+
+model Reparacion {
+  id        Int     @id @default(autoincrement())
+  usuarioId Int // ID del usuario que atendió
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  sucursalId Int // ID de la sucursal donde se realiza la reparación
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  clienteId Int // Cliente asociado a la reparación
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  productoId Int? // Producto del sistema (opcional)
+  producto   Producto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
+
+  productoExterno String? // Nombre o descripción del producto externo
+
+  problemas     String // Descripción de los problemas reportados
+  observaciones String? // Observaciones adicionales (ej. accesorios entregados)
+
+  fechaRecibido  DateTime         @default(now()) // Fecha en que se recibió el producto
+  fechaEntregado DateTime? // Fecha de entrega del producto reparado
+  estado         EstadoReparacion @default(PENDIENTE) // Estado actual de la reparación
+
+  registros RegistroReparacion[] // Historial de acciones realizadas sobre la reparación
+
+  hojaSolucion  String? // Detalles finales de la solución
+  creadoEn      DateTime @default(now()) // Fecha de creación
+  actualizadoEn DateTime @updatedAt // Última actualización
+}
+
+model RegistroReparacion {
+  id           Int        @id @default(autoincrement())
+  reparacionId Int // Relación con la reparación
+  reparacion   Reparacion @relation(fields: [reparacionId], references: [id], onDelete: Cascade)
+
+  usuarioId Int // Usuario que realizó la acción
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  estado             EstadoReparacion // Estado de la reparación al momento del registro
+  accionesRealizadas String // Descripción de las acciones realizadas (opcional)
+  fechaRegistro      DateTime         @default(now()) // Fecha del registro
+  comentarioFinal    String? // Comentario final sobre la reparación
+
+  montoPagado Int?
+}
+
+enum EstadoReparacion {
+  RECIBIDO
+  PENDIENTE // El producto está registrado pero la reparación no ha comenzado
+  EN_PROCESO // Reparación activa
+  ESPERANDO_PIEZAS // Reparación pausada por falta de piezas
+  REPARADO // Reparación finalizada, listo para entrega
+  ENTREGADO // Reparación completada y producto entregado al cliente
+  CANCELADO // Reparación cancelada
+  NO_REPARABLE // Producto no reparable tras diagnóstico
+  FINALIZADO
+}
+
+// ============================================================================
+// [S8] CAJA Y FINANZAS
+// ============================================================================
+
+model RegistroCaja {
+  id         Int      @id @default(autoincrement())
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  usuarioInicioId Int
+  usuarioInicio   Usuario  @relation("UsuarioInicio", fields: [usuarioInicioId], references: [id])
+  usuarioCierreId Int?
+  usuarioCierre   Usuario? @relation("UsuarioCierre", fields: [usuarioCierreId], references: [id])
+
+  fechaApertura DateTime  @default(now())
+  fechaCierre   DateTime?
+
+  // CHANGED: decimales para dinero
+  saldoInicial Decimal  @db.Decimal(14, 2)
+  saldoFinal   Decimal? @db.Decimal(14, 2)
+
+  estado          EstadoTurnoCaja @default(ABIERTO)
+  comentario      String?
+  comentarioFinal String?
+
+  // CHANGED: relación con movimientos (ahora “financieros”)
+  movimientos MovimientoFinanciero[]
+
+  // Opcional: “ventas” si ya las relacionas al turno
+  venta Venta[]
+
+  // Opcional: fondo fijo proyectado (para sugerir depósito de cierre)
+  fondoFijo Decimal @default(0) @db.Decimal(14, 2)
+
+  // (Puede ser redundante si confías en los movimientos de cierre)
+  depositado Boolean @default(false)
+
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@index([sucursalId, estado])
+}
+
+enum EstadoTurnoCaja {
+  ABIERTO
+  CERRADO
+  ARQUEO
+  AJUSTADO
+  ANULADO
+}
+
+model MovimientoFinanciero {
+  id Int @id @default(autoincrement())
+
+  fecha      DateTime @default(now())
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  // Si impacta efectivo, DEBE pertenecer a un turno ABIERTO
+  registroCajaId Int?
+  registroCaja   RegistroCaja? @relation(fields: [registroCajaId], references: [id])
+
+  // Clasificación y motivo (vistas Admin)
+  clasificacion ClasificacionAdmin
+  motivo        MotivoMovimiento
+
+  // Reporte/conciliación
+  metodoPago MetodoPago?
+
+  // IMPORTANTE: efectos explícitos (positivo o negativo)
+  deltaCaja  Decimal @default(0) @db.Decimal(14, 2) // + entra efectivo; - sale efectivo
+  deltaBanco Decimal @default(0) @db.Decimal(14, 2) // + entra al banco; - sale del banco
+
+  // Opcional si deltaBanco ≠ 0
+  cuentaBancariaId Int?
+  cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+
+  // Información de negocio
+  descripcion String?
+  referencia  String?
+  conFactura  Boolean? // útil para compras/gastos
+
+  // Específicos de depósitos (evita ambigüedad solicitada por el cliente)
+  esDepositoCierre    Boolean @default(false) // si true => bucket “Depósitos (Cierre)”
+  esDepositoProveedor Boolean @default(false) // si true => bucket “Depósitos a Proveedor”
+
+  // Proveedor y costos
+  proveedorId Int?
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id])
+
+  gastoOperativoTipo GastoOperativoTipo? // si motivo = GASTO_OPERATIVO
+  costoVentaTipo     CostoVentaTipo? // si motivo = COMPRA_MERCADERIA o COSTO_ASOCIADO
+
+  // Inventario (conectar cuando recibamos compras)
+  afectaInventario Boolean @default(false)
+
+  // Quién registró
+  usuarioId Int
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+
+  creadoEn          DateTime         @default(now())
+  actualizadoEn     DateTime         @updatedAt
+  esAsientoVentas   Boolean          @default(false) // 👈 nuevo
+  //nuevo
+  comprobanteTipo   ComprobanteTipo?
+  comprobanteNumero String?          @db.VarChar(64)
+  comprobanteFecha  DateTime?
+  comprobanteUrl    String? // foto/pdf del baucher
+  //nuevo
+
+  @@unique([registroCajaId, referencia], map: "uq_movfin_turno_referencia") // 👈 idempotencia por turno
+  //CONCILIACION EN REPORTES DE CIERRES CON BOLETAS
+  @@unique([cuentaBancariaId, comprobanteTipo, comprobanteNumero], map: "uq_movfin_comprobante")
+  @@index([registroCajaId, esAsientoVentas]) // 👈 útil para consultas
+  @@index([sucursalId, fecha])
+  @@index([registroCajaId])
+  @@index([clasificacion, motivo])
+  @@index([esDepositoCierre, esDepositoProveedor])
+  @@index([comprobanteTipo, comprobanteNumero], map: "idx_movfin_comprobante_lookup")
+}
+
+enum ComprobanteTipo {
+  DEPOSITO_BOLETA
+  TRANSFERENCIA
+  CHEQUE
+  TARJETA_VOUCHER
+  OTRO
+}
+
+enum TipoCuentaBancaria {
+  AHORRO
+  CORRIENTE
+  TARJETA
+}
+
+model CuentaBancaria {
+  id     Int     @id @default(autoincrement())
+  banco  String
+  numero String
+  alias  String?
+  activa Boolean @default(true)
+
+  movimientos   MovimientoFinanciero[]
+  tipo          TipoCuentaBancaria     @default(CORRIENTE)
+  creadoEn      DateTime               @default(now())
+  actualizadoEn DateTime               @updatedAt
+
+  isDeleted   Boolean   @default(false)
+  eliminadoEn DateTime? // soft delete
+
+  @@unique([banco, numero])
+}
+
+// ¿Dónde impacta la contabilidad de resultados?
+enum ClasificacionAdmin {
+  INGRESO // Ventas, otros ingresos
+  COSTO_VENTA // Mercadería + costos asociados (fletes/encomiendas)
+  GASTO_OPERATIVO // Salarios, energía, logística, etc.
+  TRANSFERENCIA // Movimientos entre Caja y Banco (no resultado)
+  AJUSTE // Sobrantes/faltantes/regularizaciones
+  CONTRAVENTA // Devoluciones / notas de crédito
+}
+
+// Motivo real del movimiento (habla el idioma del negocio)
+enum MotivoMovimiento {
+  VENTA
+  OTRO_INGRESO
+  GASTO_OPERATIVO
+  COMPRA_MERCADERIA
+  COSTO_ASOCIADO // fletes, encomiendas, transporte a tienda
+  DEPOSITO_CIERRE // “para no dejar efectivo”
+  DEPOSITO_PROVEEDOR // depósito en ventanilla/boleta pagado con efectivo
+  PAGO_PROVEEDOR_BANCO // pago a proveedor desde banco (sin pasar por caja)
+  AJUSTE_SOBRANTE
+  AJUSTE_FALTANTE
+  DEVOLUCION
+  BANCO_A_CAJA //nuevo
+}
+
+// Subtipos útiles (se pueden volver tablas si el cliente quiere editar)
+enum GastoOperativoTipo {
+  SALARIO
+  ENERGIA
+  LOGISTICA
+  RENTA
+  INTERNET
+  PUBLICIDAD
+  VIATICOS
+  OTROS
+}
+
+enum CostoVentaTipo {
+  MERCADERIA
+  FLETE
+  ENCOMIENDA
+  TRANSPORTE
+  OTROS
+}
+
+// ============================================================================
+// [S9] SALDOS Y RESÚMENES
+// ============================================================================
+
+model SucursalSaldoDiario {
+  id         Int      @id @default(autoincrement())
+  sucursalId Int
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  // Normalizar a 00:00:00 del día
+  fecha DateTime
+
+  // Caja (efectivo)
+  saldoInicioCaja Decimal @db.Decimal(14, 2)
+  ingresosCaja    Decimal @db.Decimal(14, 2)
+  egresosCaja     Decimal @db.Decimal(14, 2)
+  saldoFinalCaja  Decimal @db.Decimal(14, 2)
+
+  // Banco
+  saldoInicioBanco Decimal @db.Decimal(14, 2)
+  ingresosBanco    Decimal @db.Decimal(14, 2)
+  egresosBanco     Decimal @db.Decimal(14, 2)
+  saldoFinalBanco  Decimal @db.Decimal(14, 2)
+
+  globalDiarioId Int?
+  globalDiario   SaldoGlobalDiario? @relation("GlobalSaldos", fields: [globalDiarioId], references: [id], onDelete: SetNull)
+
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@unique([sucursalId, fecha])
+}
+
+model SaldoGlobalDiario {
+  id    Int      @id @default(autoincrement())
+  fecha DateTime @unique
+
+  // Sumatorias de todas las sucursales
+  saldoTotalCaja    Decimal @db.Decimal(14, 2)
+  ingresosTotalCaja Decimal @db.Decimal(14, 2)
+  egresosTotalCaja  Decimal @db.Decimal(14, 2)
+
+  saldoTotalBanco    Decimal @db.Decimal(14, 2)
+  ingresosTotalBanco Decimal @db.Decimal(14, 2)
+  egresosTotalBanco  Decimal @db.Decimal(14, 2)
+
+  saldosDiarios SucursalSaldoDiario[] @relation("GlobalSaldos")
+
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+enum ResumenPeriodo {
+  DIARIO
+  SEMANAL
+  MENSUAL
+  CUSTOM
+}
+
+model ResumenVenta {
+  id                  Int            @id @default(autoincrement())
+  titulo              String?
+  sucursalId          Int? // si quieres por sucursal
+  sucursal            Sucursal?      @relation(fields: [sucursalId], references: [id])
+  usuarioId           Int?
+  usuario             Usuario?       @relation(fields: [usuarioId], references: [id])
+  periodo             ResumenPeriodo @default(DIARIO)
+  fechaInicio         DateTime // p.ej. para semanal: lunes de la semana
+  fechaFin            DateTime // p.ej. semanal: domingo de la semana
+  totalVentas         Decimal @db.Decimal(14,4) // suma de montos
+  totalTransacciones  Int // número de tickets/facturas
+  unidadesVendidas    Int // suma de unidades vendidas
+  ticketPromedio      Decimal @db.Decimal(14,4) // totalVentas / totalTransacciones
+  productoTopId       Int? // producto con más ventas en el período
+  productoTop         Producto?      @relation(fields: [productoTopId], references: [id])
+  cantidadProductoTop Int?
+  creadoEn            DateTime       @default(now())
+  actualizadoEn       DateTime       @updatedAt
+
+  detalles      DetalleResumenVenta[] // opcional, para desglose por producto
+  observaciones String?
+}
+
+model DetalleResumenVenta {
+  id              Int          @id @default(autoincrement())
+  resumenVentaId  Int
+  resumenVenta    ResumenVenta @relation(fields: [resumenVentaId], references: [id], onDelete: Cascade)
+  productoId      Int
+  producto        Producto     @relation(fields: [productoId], references: [id])
+  cantidadVendida Int // unidades vendidas de este producto
+  montoVenta      Decimal @db.Decimal(14,4) // total facturado de este producto
+}
+
+// ============================================================================
+// [S10] REQUISICIONES / COMPRAS / PEDIDOS
+// ============================================================================
+
+// --- Requisiciones ---
+
+model Requisicion {
+  id                  Int                    @id @default(autoincrement())
+  folio               String                 @unique // un identificador legible (p. ej. “REQ-2025-0001”)
+  fecha               DateTime               @default(now()) //fecha de creacion          // cuándo se generó
+  sucursalId          Int
+  sucursal            Sucursal               @relation(fields: [sucursalId], references: [id])
+  usuarioId           Int
+  usuario             Usuario                @relation(fields: [usuarioId], references: [id])
+  estado              RequisicionEstado      @default(PENDIENTE) // PENDIENTE, ENVIADA, COMPLETADA…
+  observaciones       String? // notas adicionales
+  totalLineas         Int                    @default(0) // número de líneas (se puede calcular en un hook)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  lineas              RequisicionLinea[] // relación 1-N
+  //nuevas props
+  totalRequisicion    Float?
+  fechaRecepcion      DateTime?
+  esIngresoAutomatico Boolean                @default(false)
+  ingresadaAStock     Boolean                @default(false)
+  //registro de recibidos
+  recepciones         RequisicionRecepcion[]
+  movimientoStock     HistorialStock[]
+  compra              Compra?                @relation
+}
+
+model RequisicionLinea {
+  id Int @id @default(autoincrement())
+
+  // Requisición padre
+  requisicionId Int
+  requisicion   Requisicion @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
+
+  // 🔎 Reporteo por familia (lo conservamos)
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+
+  // ✅ Presentación concreta (SKU) que se está solicitando
+  productoSkuId Int
+  sku           ProductoSKU @relation("SkuToRequisicionLinea", fields: [productoSkuId], references: [id], onDelete: Restrict)
+
+  // Snapshots/valores al momento de generar
+  cantidadActual   Int // stock al momento
+  stockMinimo      Int // umbral
+  cantidadSugerida Int // (stockMinimo − cantidadActual), etc.
+  precioUnitario   Decimal? @db.Decimal(12, 4) // sugerido/último conocido para ese SKU
+
+  fechaExpiracion DateTime? // si aplica en agro (vencimiento estimado)
+
+  // Recepción/seguimiento
+  cantidadRecibida Int?
+  ingresadaAStock  Boolean @default(false)
+
+  // Relaciones existentes
+  recepcionesLineas RequisicionRecepcionLinea[]
+  compraDetalles    CompraDetalle[]             @relation("DetalleRequisicionCompra")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requisicionId])
+  @@index([productoSkuId])
+  @@index([productoId])
+}
+
+model RequisicionRecepcion {
+  id             Int                         @id @default(autoincrement())
+  requisicionId  Int
+  requisicion    Requisicion                 @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
+  fechaRecepcion DateTime                    @default(now())
+  usuarioId      Int // usuario que confirma la recepción
+  usuario        Usuario                     @relation(fields: [usuarioId], references: [id])
+  observaciones  String? // notas o comentarios sobre la recepción
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+  lineas         RequisicionRecepcionLinea[]
+  //relacion con stock:
+  stockLotes     Stock[]                     @relation("StockRecepcion")
+}
+
+model RequisicionRecepcionLinea {
+  id                     Int                  @id @default(autoincrement())
+  requisicionRecepcionId Int
+  requisicionRecepcion   RequisicionRecepcion @relation(fields: [requisicionRecepcionId], references: [id], onDelete: Cascade)
+  requisicionLineaId     Int // referencia a la línea original para trazabilidad
+  requisicionLinea       RequisicionLinea     @relation(fields: [requisicionLineaId], references: [id], onDelete: Cascade)
+  productoId             Int
+  producto               Producto             @relation(fields: [productoId], references: [id])
+  cantidadSolicitada     Int // cantidad solicitada en la requisición original (puedes replicar o calcular)
+  cantidadRecibida       Int // cantidad realmente recibida y agregada a stock
+  ingresadaAStock        Boolean              @default(true) // indica si se ingresó o no el stock
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum RequisicionEstado {
+  BORRADOR // aún no se ha generado formalmente
+  PENDIENTE // creada y a la espera de aprobar/envío
+  APROBADA // validada internamente y lista para enviar a compras
+  ENVIADA // ya fue enviada al área de compras/proveedor
+  RECIBIDA // confirmada la recepción parcial o total de los productos
+  COMPLETADA // todas las líneas recibidas y la requisición cerrada
+  CANCELADA // anulada por algún motivo
+  ENVIADA_COMPRAS
+}
+
+// --- Compras ---
+
+model CompraDetalle {
+  id                 Int               @id @default(autoincrement())
+  cantidad           Int
+  costoUnitario      Decimal  @db.Decimal(14,4)
+  productoId         Int?
+  producto           Producto?         @relation(fields: [productoId], references: [id])
+  compraId           Int
+  compra             Compra            @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  // relación opcional a la línea de requisición
+  requisicionLineaId Int?
+  requisicionLinea   RequisicionLinea? @relation("DetalleRequisicionCompra", fields: [requisicionLineaId], references: [id], onDelete: Cascade)
+  creadoEn           DateTime          @default(now())
+  actualizadoEn      DateTime          @updatedAt
+}
+
+enum EstadoCompra {
+  RECIBIDO
+  CANCELADO
+  RECIBIDO_PARCIAL
+  ESPERANDO_ENTREGA // <— lo dejamos en el enum
+}
+
+enum OrigenCompra {
+  DIRECTA
+  REQUISICION
+  PEDIDO
+}
+
+model Compra {
+  id            Int             @id @default(autoincrement())
+  sucursalId    Int?
+  sucursal      Sucursal?       @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  fecha         DateTime        @default(now())
+  total         Decimal @db.Decimal(14,4)
+  detalles      CompraDetalle[]
+  estado        EstadoCompra    @default(ESPERANDO_ENTREGA) // TEMPORAL, no usar aún el valor nuevo
+  requisicionId Int?            @unique
+  requisicion   Requisicion?    @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
+
+  ingresadaAStock           Boolean @default(false)
+  cantidadRecibidaAcumulada Int     @default(0)
+
+  proveedorId Int?
+  proveedor   Proveedor? @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  usuarioId   Int
+  usuario     Usuario    @relation(fields: [usuarioId], references: [id])
+
+  pedido Pedido? @relation("PedidoACompra")
+
+  facturaNumero String? // p. ej. “F001-000123”
+  facturaFecha  DateTime? // si quieres guardar la fecha de emisión
+  conFactura    Boolean      @default(false) // si solo te interesa saber si viene con factura
+  origen        OrigenCompra @default(DIRECTA) // 👈 nuevo campo
+
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+// --- Pedidos ---
+
+/// Define los posibles estados de un pedido de cliente
+enum PedidoEstado {
+  PENDIENTE // recién creado, a la espera de procesar
+  ENVIADO_COMPRAS // ya se pasó al módulo de compras
+  RECIBIDO // los artículos llegaron y se ingresaron a stock o se entregaron
+  CANCELADO // el cliente anuló o no se completó
+}
+
+/// Cabecera del pedido de cliente
+enum PedidoPrioridad {
+  ALTA
+  BAJA
+  MEDIA
+}
+
+enum TipoPedido {
+  INTERNO
+  CLIENTE
+}
+
+model Pedido {
+  id            Int           @id @default(autoincrement())
+  folio         String        @unique // p.ej. “PED-2025-0001”
+  fecha         DateTime      @default(now())
+  sucursalId    Int // en qué tienda/clientes se creó
+  sucursal      Sucursal      @relation(fields: [sucursalId], references: [id])
+  clienteId     Int? // quien pide
+  cliente       Cliente?      @relation(fields: [clienteId], references: [id])
+  usuarioId     Int // quién registró el pedido
+  usuario       Usuario       @relation(fields: [usuarioId], references: [id])
+  estado        PedidoEstado  @default(PENDIENTE)
+  observaciones String? // notas adicionales
+  totalLineas   Int           @default(0) // número de líneas
+  totalPedido   Decimal @db.Decimal(14,4) // suma de (cantidad×precio) de las líneas
+  creadoEn      DateTime      @default(now())
+  actualizadoEn DateTime      @updatedAt
+  lineas        PedidoLinea[] // detalle de productos
+  /// Opcional: si quieres enlazar este pedido a la Compra que generes
+  compraId      Int?          @unique
+  compra        Compra?       @relation("PedidoACompra", fields: [compraId], references: [id])
+
+  tipo      TipoPedido      @default(INTERNO)
+  prioridad PedidoPrioridad @default(MEDIA)
+}
+
+/// Cada línea de un pedido de cliente
+model PedidoLinea {
+  id       Int    @id @default(autoincrement())
+  pedidoId Int
+  pedido   Pedido @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  productoId Int
+  producto   Producto @relation(fields: [productoId], references: [id])
+
+  cantidad       Int
+  precioUnitario Decimal @db.Decimal(14,4) // precio acordado con el cliente (puede ser null si lo defines luego)
+  subtotal       Decimal @db.Decimal(14,4) @default(0) // puede llenarse en un hook (cantidad×precioUnitario)
+
+  notas         String? // por si el cliente pide algo especial en esa línea
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+// ============================================================================
+// [S11] TRANSFERENCIAS ENTRE SUCURSALES
+// ============================================================================
+
+model TransferenciaProducto {
+  id                 Int              @id @default(autoincrement())
+  productoId         Int // Producto que se transfiere
+  producto           Producto         @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  cantidad           Int // Cantidad de producto transferido
+  sucursalOrigenId   Int // Sucursal de origen
+  sucursalOrigen     Sucursal         @relation("SucursalOrigen", fields: [sucursalOrigenId], references: [id], onDelete: Cascade)
+  sucursalDestinoId  Int // Sucursal de destino
+  sucursalDestino    Sucursal         @relation("SucursalDestino", fields: [sucursalDestinoId], references: [id], onDelete: Cascade) // NUEVA RELACIÓN
+  fechaTransferencia DateTime         @default(now())
+  usuarioEncargadoId Int? // Relación con el usuario que hace la transferencia
+  usuarioEncargado   Usuario?         @relation(fields: [usuarioEncargadoId], references: [id], onDelete: SetNull)
+  //tracker
+  movimientoStock    HistorialStock[]
+}
+
+model SolicitudTransferenciaProducto {
+  id                   Int                          @id @default(autoincrement())
+  productoId           Int // ID del producto que se quiere transferir
+  producto             Producto                     @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  cantidad             Int // Cantidad solicitada
+  sucursalOrigenId     Int // Sucursal de origen de la solicitud
+  sucursalOrigen       Sucursal                     @relation("SucursalOrigenSolicitud", fields: [sucursalOrigenId], references: [id], onDelete: Cascade)
+  sucursalDestinoId    Int // Sucursal de destino de la solicitud
+  sucursalDestino      Sucursal                     @relation("SucursalDestinoSolicitud", fields: [sucursalDestinoId], references: [id], onDelete: Cascade)
+  usuarioSolicitanteId Int? // Usuario que realiza la solicitud
+  usuarioSolicitante   Usuario?                     @relation("UsuarioSolicitante", fields: [usuarioSolicitanteId], references: [id], onDelete: SetNull)
+  estado               EstadoSolicitudTransferencia @default(PENDIENTE) // Estado de la solicitud
+  fechaSolicitud       DateTime                     @default(now()) // Fecha de la solicitud
+  fechaAprobacion      DateTime? // Fecha de aprobación o rechazo
+  administradorId      Int? // Admin que aprueba/rechaza la solicitud
+  administrador        Usuario?                     @relation("AdministradorAprobador", fields: [administradorId], references: [id], onDelete: SetNull)
+  // motivoRechazo         String?                                          // Motivo de rechazo, si es rechazado
+}
+
 // Enum para el estado de las solicitudes de transferencia
 enum EstadoSolicitudTransferencia {
   PENDIENTE
   APROBADO
   RECHAZADO
 }
-  
+
+// ============================================================================
+// [S12] METAS Y DEPÓSITOS DE COBRO
+// ============================================================================
+
+model MetaUsuario {
+  id            Int              @id @default(autoincrement())
+  usuarioId     Int // Relación con el usuario
+  usuario       Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursalId    Int // Relación con la sucursal donde se establece la meta
+  sucursal      Sucursal         @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  fechaInicio   DateTime         @default(now())
+  fechaFin      DateTime // Fin del plazo de la meta
+  montoMeta     Decimal @db.Decimal(14,4) // Monto de ventas objetivo
+  montoActual   Decimal @db.Decimal(14,4)  @default(0) // Ventas acumuladas por el usuario dentro del plazo
+  cumplida      Boolean          @default(false) // Indica si la meta fue cumplida
+  fechaCumplida DateTime? // Fecha en que se cumplió la meta, si aplica
+  numeroVentas  Decimal @db.Decimal(14,4) // El numero de ventas hasta el momento
+  tituloMeta    String?
+  estado        EstadoMetaTienda
+}
+
+enum EstadoMetaTienda {
+  CANCELADO
+  ABIERTO
+  FINALIZADO
+  CERRADO
+}
+
+model MetaCobros {
+  id          Int      @id @default(autoincrement())
+  usuarioId   Int // Relación con el usuario
+  usuario     Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursalId  Int // Relación con la sucursal donde se establece la meta
+  sucursal    Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  fechaCreado DateTime @default(now()) // Fecha en que se creó la meta
+
+  fechaInicio     DateTime        @default(now())
+  fechaFin        DateTime // Fin del plazo de la meta
+  montoMeta       Decimal @db.Decimal(14,4) // Monto objetivo de cobros a alcanzar
+  montoActual     Decimal @db.Decimal(14,4) @default(0) // Cobros acumulados por el usuario hasta ahora
+  cumplida        Boolean         @default(false) // Indica si la meta fue cumplida
+  fechaCumplida   DateTime? // Fecha en que se cumplió la meta, si aplica
+  numeroDepositos Int             @default(0) // Número de depósitos realizados hasta el momento
+  tituloMeta      String?
+  estado          EstadoMetaCobro
+  DepositoCobro   DepositoCobro[]
+}
+
+enum EstadoMetaCobro {
+  CANCELADO
+  ABIERTO
+  FINALIZADO
+  CERRADO
+}
+
+model DepositoCobro {
+  id              Int      @id @default(autoincrement())
+  usuarioId       Int // Relación con el usuario que hizo el depósito
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursalId      Int // Relación con la sucursal del depósito
+  sucursal        Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  numeroBoleta    String // Número de boleta o comprobante del depósito
+  fechaRegistro   DateTime @default(now()) // Fecha en la que se registró el depósito
+  montoDepositado Decimal @db.Decimal(14,4) // Monto del depósito realizado
+  descripcion     String? // Descripción o nota opcional sobre el depósito
+
+  metaCobroId Int // Relación con MetaCobros
+  metaCobro   MetaCobros @relation(fields: [metaCobroId], references: [id], onDelete: Cascade) // Relación N:1 con MetaCobros
+}
+
+// ============================================================================
+// [S13] NOTIFICACIONES
+// ============================================================================
+
+model Notificacion {
+  id                     Int                      @id @default(autoincrement())
+  mensaje                String // Mensaje de la notificación
+  remitenteId            Int? // Usuario que envía la notificación (opcional)
+  remitente              Usuario?                 @relation("Remitente", fields: [remitenteId], references: [id])
+  tipoNotificacion       TipoNotificacion // Tipo de notificación (enum)
+  referenciaId           Int? // ID de referencia relacionado (por ejemplo, ID de solicitud o transferencia)
+  fechaCreacion          DateTime                 @default(now()) // Fecha de creación de la notificación
+  notificacionesUsuarios NotificacionesUsuarios[] // Relación con tabla intermedia
+
+  Usuario Usuario[] @relation("Destinatario")
+}
+
+model NotificacionesUsuarios {
+  id             Int          @id @default(autoincrement())
+  usuarioId      Int // Usuario que recibe la notificación
+  usuario        Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  notificacionId Int // ID de la notificación
+  notificacion   Notificacion @relation(fields: [notificacionId], references: [id], onDelete: Cascade)
+  leido          Boolean      @default(false) // Indica si la notificación fue leída
+  eliminado      Boolean      @default(false) // Indica si la notificación fue eliminada
+  leidoEn        DateTime? // Fecha en que se leyó
+  recibidoEn     DateTime     @default(now()) // Fecha en que se recibió la notificación
+}
+
+// ============================================================================
+// [S14] UBICACIÓN (DEPARTAMENTOS / MUNICIPIOS)
+// ============================================================================
+
+model Departamento {
+  id         Int         @id @default(autoincrement())
+  nombre     String      @unique
+  municipios Municipio[] // Relación con municipios
+  clientes   Cliente[] // Relación con los clientes
+}
+
+model Municipio {
+  id             Int          @id @default(autoincrement())
+  nombre         String       @unique
+  departamentoId Int
+  departamento   Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
+  clientes       Cliente[] // Relación con los clientes
+}
+
+// ============================================================================
+// [S15] OTROS (SORTEOS / TICKETS)
+// ============================================================================
+
+model TicketSorteo {
+  id                Int          @id @default(autoincrement()) // ID único para cada sorteo
+  descripcionSorteo String? // Descripción del sorteo, incluyendo detalles sobre premios
+  // fechaInicio     DateTime?  // Fecha y hora de inicio del sorteo
+  // fechaFinal      DateTime?  // Fecha y hora de finalización del sorteo
+  creadoEn          DateTime     @default(now()) // Fecha de creación del registro
+  actualizadoEn     DateTime     @updatedAt // Fecha de la última actualización
+  estado            EstadoTicket
+}
+
+enum EstadoTicket {
+  ACTIVO // El sorteo está en curso
+  INACTIVO // El sorteo ha finalizado
+}

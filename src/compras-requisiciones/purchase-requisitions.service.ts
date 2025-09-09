@@ -26,6 +26,8 @@ import { EntregaStockData } from 'src/utilities/utils';
 import { UtilitiesService } from 'src/utilities/utilities.service';
 import { HistorialStockTrackerService } from 'src/historial-stock-tracker/historial-stock-tracker.service';
 import { RecepcionarCompraAutoDto } from './dto/compra-recepcion.dto';
+import { toDecimal } from 'src/utils/decimal';
+import { Decimal } from '@prisma/client/runtime/library';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
@@ -463,7 +465,7 @@ export class PurchaseRequisitionsService {
           id: d.id,
           cantidad,
           costoUnitario,
-          subtotal: cantidad * costoUnitario,
+          subtotal: cantidad * Number(costoUnitario),
           creadoEn: (d.creadoEn as any)?.toISOString?.() ?? null,
           actualizadoEn: (d.actualizadoEn as any)?.toISOString?.() ?? null,
           producto: {
@@ -1046,7 +1048,7 @@ export class PurchaseRequisitionsService {
           productoId: number;
           cantidadSolicitada: number;
           cantidadRecibida: number;
-          precioUnitario: number;
+          precioUnitario: string;
         }> = [];
 
         let solicitadoTotal = 0;
@@ -1093,7 +1095,7 @@ export class PurchaseRequisitionsService {
           stockDtos.push({
             productoId: det.productoId,
             cantidad: cantidadRecibida,
-            costoTotal: precioUnitario * cantidadRecibida,
+            costoTotal: toDecimal(precioUnitario).mul(cantidadRecibida),
             fechaIngreso: nowISO,
             fechaExpiracion: null,
             precioCosto: precioUnitario,
@@ -1106,7 +1108,7 @@ export class PurchaseRequisitionsService {
             productoId: det.productoId,
             cantidadSolicitada,
             cantidadRecibida,
-            precioUnitario,
+            precioUnitario: String(det.costoUnitario ?? 0), // <-- forzar a string
           });
         }
 
@@ -1116,12 +1118,12 @@ export class PurchaseRequisitionsService {
         );
         const cantidadesAnteriores: Record<number, number> = {};
         await Promise.all(
-          productIds.map(async (pid) => {
+          productIds.map(async (pSkuID) => {
             const agg = await tx.stock.aggregate({
-              where: { productoId: pid, sucursalId },
+              where: { productoSkuId: pSkuID, sucursalId },
               _sum: { cantidad: true },
             });
-            cantidadesAnteriores[pid] = agg._sum.cantidad ?? 0;
+            cantidadesAnteriores[pSkuID] = agg._sum.cantidad ?? 0;
           }),
         );
 
@@ -1462,8 +1464,9 @@ export class PurchaseRequisitionsService {
           select: { cantidad: true, costoUnitario: true },
         });
         const total = detalles.reduce(
-          (acc, it) => acc + it.cantidad * it.costoUnitario,
-          0,
+          (acc: Prisma.Decimal, it) =>
+            acc.add(toDecimal(it.costoUnitario).mul(it.cantidad)),
+          toDecimal(0),
         );
 
         await tx.compra.update({

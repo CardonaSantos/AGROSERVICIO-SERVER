@@ -12,7 +12,7 @@ import {
 // Este es el objeto, que esperamos que cada objeto dentro de un array que enviaremos, tenga el formato
 export class CreateStockDto {
   @IsInt()
-  productoId: number;
+  productoSKUID: number;
 
   @IsInt()
   cantidad: number;

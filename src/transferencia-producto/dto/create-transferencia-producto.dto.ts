@@ -4,6 +4,8 @@ export class CreateTransferenciaProductoDto {
   @IsInt()
   productoId: number; // ID del producto que se va a transferir
   @IsInt()
+  productoSKUID;
+  @IsInt()
   cantidad: number; // Cantidad a transferir
   @IsInt()
   sucursalOrigenId: number; // ID de la sucursal de origen

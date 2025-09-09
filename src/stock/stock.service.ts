@@ -57,7 +57,7 @@ export class StockService {
         // Obtener cantidad actual del producto en esa sucursal
         const sumaStockActual = await this.prisma.stock.aggregate({
           where: {
-            productoId: entry.productoId,
+            productoSkuId: entry.productoSKUID,
             sucursalId,
           },
           _sum: {
@@ -71,7 +71,7 @@ export class StockService {
         // Crear el registro de stock
         const registroStock = await this.prisma.stock.create({
           data: {
-            productoId: entry.productoId,
+            productoSkuId: entry.productoSKUID,
             cantidad: entry.cantidad,
             cantidadInicial: entry.cantidad,
             costoTotal: entry.precioCosto * entry.cantidad,
@@ -87,7 +87,7 @@ export class StockService {
 
         // Armar la data para trackeo
         historialTrackers.push({
-          productoId: entry.productoId,
+          productoId: entry.productoSKUID,
           cantidadAnterior,
           cantidadVendida: entry.cantidad,
         });
@@ -143,10 +143,9 @@ export class StockService {
       const stock = await this.prisma.stock.findUnique({
         where: { id },
         include: {
-          producto: {
-            select: {
-              nombre: true,
-              id: true,
+          sku: {
+            include: {
+              producto: true,
             },
           },
         },
@@ -173,7 +172,7 @@ export class StockService {
       // Calcular stock total antes de eliminar
       const { _sum } = await tx.stock.aggregate({
         where: {
-          productoId: dto.productoId,
+          productoSkuId: dto.productoId,
           sucursalId: dto.sucursalId,
         },
         _sum: { cantidad: true },
@@ -217,9 +216,12 @@ export class StockService {
   }
 
   // Total de stock de un producto en una sucursal
-  async getTotalStock(productoId: number, sucursalId: number): Promise<number> {
+  async getTotalStock(
+    productoSKUID: number,
+    sucursalId: number,
+  ): Promise<number> {
     const { _sum } = await this.prisma.stock.aggregate({
-      where: { productoId, sucursalId },
+      where: { productoSkuId: productoSKUID, sucursalId },
       _sum: { cantidad: true },
     });
     return _sum.cantidad ?? 0;

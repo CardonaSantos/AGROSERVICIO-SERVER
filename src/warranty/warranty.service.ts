@@ -245,7 +245,7 @@ export class WarrantyService {
               // Entregas una unidad nueva al cliente => salida de inventario normal
               const lote = await tx.stock.findFirst({
                 where: {
-                  productoId: garantiaMain.productoId,
+                  productoSkuId: garantiaMain.productoId,
                   sucursalId: garantiaMain.sucursalId,
                 },
                 orderBy: { fechaIngreso: 'desc' },
